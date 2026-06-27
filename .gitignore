@@ -1,0 +1,19 @@
+# secrets + runtime — never commit
+.env
+*.key
+.rapidapi_key
+# local data store + browser profiles
+.job-scout/
+*.db
+*.db-wal
+*.db-shm
+chrome-profile/
+# resume files (personal)
+resumes/
+*.docx
+*.pdf
+# node
+node_modules/
+npm-debug.log*
+# macOS
+.DS_Store

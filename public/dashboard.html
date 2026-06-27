@@ -1,0 +1,2187 @@
+<!DOCTYPE html><script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Job Match Dashboard",
+  "schemaVersion": 1,
+  "description": "Job match dashboard. Searches Dice, Indeed, and ZipRecruiter for roles matching your profile. Tracks applications with status and notes. Pre-populates instantly from daily scheduled task results; falls back to live fetch if data is stale or missing.",
+  "mcpTools": [
+    "mcp__b0b0549b-bf32-4d46-9b0c-b3315e78be7b__search_jobs",
+    "mcp__488f41d8-7ab4-4647-88f2-ba14dd0aaa6f__search_jobs",
+    "mcp__c73855fe-5ca0-4178-9fe0-23de8bc7512b__search_jobs"
+  ],
+  "mcpServerNames": [
+    "Dice",
+    "Indeed",
+    "ZipRecruiter"
+  ]
+}
+</script>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Match Dashboard</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f4f6f9; color: #1a1a2e; padding: 20px; min-height: 100vh;
+}
+
+.header-row { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; flex-wrap: wrap; }
+h1 { font-size: 20px; color: #1A3A5C; font-weight: 700; }
+.source-pill { font-size: 11px; padding: 3px 9px; border-radius: 10px; font-weight: 500; }
+.pill-live   { background: #e6f4ea; color: #1b7a3e; }
+.pill-cached { background: #e8edf5; color: #1A3A5C; }
+.pill-stale  { background: #fff3e0; color: #c46000; }
+.subtitle { font-size: 12px; color: #888; margin-bottom: 14px; }
+
+/* Tabs */
+.tabs { display: flex; border-bottom: 2px solid #e0e6ef; margin-bottom: 16px; }
+.tab {
+  padding: 9px 18px; font-size: 13px; font-weight: 500; cursor: pointer;
+  color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; user-select: none;
+}
+.tab.active { color: #1A3A5C; border-bottom-color: #1A3A5C; }
+.tab:hover:not(.active) { color: #444; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Stats */
+.stats-bar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.stat-chip {
+  background: white; border-radius: 8px; padding: 7px 13px;
+  font-size: 12px; color: #555; box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  display: flex; align-items: center; gap: 6px;
+}
+.stat-chip strong { color: #1A3A5C; font-size: 15px; }
+
+/* Table */
+.table-wrap { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+table { width: 100%; border-collapse: collapse; }
+thead tr { background: #1A3A5C; color: white; }
+th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; }
+td { padding: 9px 12px; font-size: 13px; border-bottom: 1px solid #f0f2f5; vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.job-row:hover td { background: #f7f9ff; }
+
+/* Score */
+.score-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 22px; border-radius: 11px; font-weight: 700; font-size: 12px; color: white;
+}
+.s9,.s10 { background: #1b7a3e; } .s8 { background: #2d9c52; } .s7 { background: #5aab35; }
+.s6 { background: #d97706; }      .s5 { background: #e67e22; }
+
+.job-title-link { font-weight: 600; color: #1A3A5C; text-decoration: none; font-size: 13px; }
+.job-title-link:hover { text-decoration: underline; }
+.reason { font-size: 11px; color: #999; margin-top: 2px; line-height: 1.4; }
+
+/* Badges */
+.badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: middle; }
+.b-dice     { background: #e8edf5; color: #1A3A5C; }
+.b-indeed   { background: #fff0e0; color: #a04000; }
+.b-ziprecruiter { background: #e8f5e9; color: #1b5e20; }
+.b-linkedin { background: #e8f0fb; color: #1a4c9e; }
+.b-glassdoor{ background: #e6f5ee; color: #0d6640; }
+.b-jsearch  { background: #f3e8ff; color: #6d28d9; }
+.b-other    { background: #f0f0f0; color: #555; }
+.resume-table { width:100%; border-collapse:collapse; font-size:13px; }
+.resume-table th { background:#f8fafc; color:#64748b; font-weight:600; padding:8px 12px; text-align:left; border-bottom:1px solid #e2e8f0; }
+.resume-table td { padding:8px 12px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.resume-table tr:hover td { background:#f8fafc; }
+.r-badge    { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
+.r-base     { background:#e0f2fe; color:#0369a1; }
+.r-tailored { background:#f0fdf4; color:#166534; }
+.r-cover    { background:#fef9c3; color:#854d0e; }
+.r-section  { font-weight:600; color:#1A3A5C; margin:16px 0 8px; font-size:14px; display:flex; align-items:center; gap:8px; }
+.r-count    { background:#e2e8f0; color:#64748b; font-size:11px; padding:2px 7px; border-radius:10px; font-weight:500; }
+.btn-rarchive       { font-size:12px; padding:3px 10px; border:1px solid #cbd5e1; border-radius:5px; cursor:pointer; background:white; color:#64748b; }
+.btn-rarchive:hover { background:#f1f5f9; }
+.btn-rrestore       { font-size:12px; padding:3px 10px; border:1px solid #86efac; border-radius:5px; cursor:pointer; background:#f0fdf4; color:#166534; }
+.btn-rrestore:hover { background:#dcfce7; }
+.btn-rdelete        { font-size:12px; padding:3px 6px;  border:1px solid #fca5a5; border-radius:5px; cursor:pointer; background:white; color:#dc2626; }
+.btn-rdelete:hover  { background:#fef2f2; }
+/* ── Settings tab ─────────────────────────────────────────── */
+.settings-wrap    { max-width:720px; }
+.settings-section { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px 24px; margin-bottom:16px; }
+.settings-section h3 { font-size:13px; font-weight:700; color:#1A3A5C; text-transform:uppercase; letter-spacing:.05em; margin:0 0 14px; }
+.settings-row     { display:flex; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.settings-field   { display:flex; flex-direction:column; gap:4px; flex:1; min-width:180px; }
+.settings-field label { font-size:12px; font-weight:600; color:#475569; }
+.settings-field input, .settings-field select, .settings-field textarea {
+  font-size:13px; padding:7px 10px; border:1px solid #d1d5db; border-radius:6px;
+  background:#fafafa; color:#1e293b; font-family:inherit; }
+.settings-field textarea { resize:vertical; min-height:80px; line-height:1.5; }
+.settings-field input:focus, .settings-field select:focus, .settings-field textarea:focus {
+  outline:none; border-color:#1A3A5C; background:#fff; }
+.settings-radio-group { display:flex; flex-direction:column; gap:6px; }
+.settings-radio-group label { display:flex; align-items:center; gap:8px; font-weight:400; color:#374151; font-size:13px; cursor:pointer; }
+.btn-save-settings { background:#1A3A5C; color:#fff; border:none; border-radius:7px; padding:10px 24px;
+  font-size:14px; font-weight:600; cursor:pointer; margin-top:4px; }
+.btn-save-settings:hover { background:#14304e; }
+.settings-saved-msg { display:none; color:#16a34a; font-size:13px; font-weight:600; margin-left:12px; }
+.resume-add-form    { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:16px; margin-top:12px; display:none; }
+.resume-add-form h4 { margin:0 0 12px; color:#1A3A5C; font-size:14px; }
+.rf-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.rf-row input, .rf-row select { padding:6px 10px; border:1px solid #d1d5db; border-radius:5px; font-size:13px; min-width:120px; }
+.rf-row input { flex:1; }
+.r-file { font-family:monospace; font-size:12px; color:#475569; }
+.b-new      { background: #fef3c7; color: #92400e; }
+
+.type-badge { display: inline-block; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 500; }
+.t-remote { background: #e6f4ea; color: #1b7a3e; }
+.t-hybrid { background: #fff3e0; color: #c46000; }
+.t-onsite { background: #fce4ec; color: #a00; }
+
+.salary    { font-size: 12px; color: #444; white-space: nowrap; }
+.date-cell { font-size: 11px; color: #aaa; white-space: nowrap; }
+
+/* Action buttons */
+.btn-apply {
+  padding: 4px 10px; font-size: 11px; border-radius: 5px;
+  border: 1px solid #d1d5db; background: white; cursor: pointer;
+  color: #374151; font-weight: 500; transition: all 0.15s; white-space: nowrap;
+}
+.btn-apply:hover:not(.applied) { background: #1A3A5C; color: white; border-color: #1A3A5C; }
+.btn-apply.applied { background: #dcfce7; color: #166534; border-color: #86efac; cursor: default; }
+
+.btn-tailor {
+  padding: 4px 10px; font-size: 11px; border-radius: 5px;
+  border: 1px solid #c7d7f0; background: #eef3fc; cursor: pointer;
+  color: #1A3A5C; font-weight: 500; transition: all 0.15s; white-space: nowrap; margin-left: 4px;
+}
+.btn-tailor:hover { background: #1A3A5C; color: white; border-color: #1A3A5C; }
+
+.btn-dismiss {
+  padding: 4px 7px; font-size: 11px; border-radius: 5px;
+  border: 1px solid #e5e7eb; background: white; cursor: pointer;
+  color: #9ca3af; transition: all 0.15s; margin-left: 4px;
+}
+.btn-dismiss:hover { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+
+/* Application status badges */
+.app-status {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 700; white-space: nowrap; letter-spacing: 0.3px;
+}
+.app-status-select {
+  font-size: 10px; font-weight: 700; border-radius: 10px; border: none;
+  padding: 2px 6px; cursor: pointer; appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='%23666' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 5px center;
+  padding-right: 18px;
+}
+/* Pipeline summary */
+.pipeline-bar {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  background: white; border-radius: 8px; padding: 10px 14px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07); margin-top: 12px; font-size: 12px;
+}
+.pipeline-label { color: #888; font-size: 11px; margin-right: 4px; }
+.pipeline-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  cursor: pointer;
+}
+.pipeline-chip:hover { opacity: 0.8; }
+
+/* Dismiss reason modal */
+.dismiss-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.dismiss-chip {
+  padding: 5px 11px; font-size: 12px; border-radius: 14px; cursor: pointer;
+  border: 1px solid #d1d5db; background: white; color: #374151; transition: all 0.15s;
+}
+.dismiss-chip:hover  { border-color: #991b1b; color: #991b1b; }
+.dismiss-chip.active { background: #fee2e2; border-color: #f87171; color: #991b1b; font-weight: 600; }
+.dismiss-input {
+  width: 100%; padding: 7px 10px; font-size: 12px; font-family: inherit;
+  border: 1px solid #d1d5db; border-radius: 5px; color: #1a1a2e; margin-top: 4px;
+}
+.dismiss-input:focus { outline: none; border-color: #991b1b; }
+
+.action-cell { white-space: nowrap; }
+
+/* Loading */
+.loading { text-align: center; padding: 60px 20px; }
+.spinner {
+  display: inline-block; width: 26px; height: 26px;
+  border: 3px solid #dce3ed; border-top-color: #1A3A5C;
+  border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.status-msg { font-size: 13px; color: #777; }
+
+.btn-remove {
+  padding: 3px 7px; font-size: 11px; border-radius: 4px;
+  border: 1px solid #fca5a5; background: white; cursor: pointer; color: #991b1b;
+}
+.btn-remove:hover { background: #fee2e2; }
+
+.btn-edit-act {
+  padding: 3px 7px; font-size: 11px; border-radius: 4px;
+  border: 1px solid #c7d7f0; background: white; cursor: pointer; color: #1A3A5C;
+  margin-right: 4px;
+}
+.btn-edit-act:hover { background: #eef3fc; }
+
+.act-form-editing {
+  background: #f0f7ff; border-top: 2px solid #1A3A5C;
+}
+.act-form-editing-label {
+  grid-column: 1 / -1; font-size: 11px; color: #1A3A5C; font-weight: 600;
+  padding: 2px 0; display: flex; align-items: center; gap: 6px;
+}
+.btn-edit-cancel {
+  padding: 6px 14px; font-size: 12px; border-radius: 5px;
+  border: 1px solid #d1d5db; background: white; color: #555; cursor: pointer;
+}
+
+.error-box { background: #fff3f3; border: 1px solid #fcc; border-radius: 8px; padding: 16px; color: #c00; font-size: 13px; margin-top: 12px; }
+.empty-box { text-align: center; padding: 50px; color: #aaa; font-size: 13px; }
+.disclaimer { margin-top: 10px; font-size: 11px; color: #bbb; line-height: 1.6; padding: 0 2px; }
+
+/* Activity tracking tab */
+.week-banner {
+  background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  padding: 14px 18px; margin-bottom: 14px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.week-label { font-size: 12px; color: #888; }
+.week-range { font-size: 14px; font-weight: 600; color: #1A3A5C; }
+.week-count { font-size: 26px; font-weight: 700; color: #1A3A5C; line-height: 1; }
+.week-count.met  { color: #1b7a3e; }
+.week-count.warn { color: #c46000; }
+.week-req  { font-size: 12px; color: #888; }
+.progress-bar-wrap { flex: 1; min-width: 120px; }
+.progress-bar-bg { background: #e8edf5; border-radius: 6px; height: 8px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 6px; background: #1A3A5C; transition: width 0.3s; }
+.progress-bar-fill.met { background: #1b7a3e; }
+.week-nav { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn-week-nav {
+  padding: 4px 10px; font-size: 12px; border-radius: 5px;
+  border: 1px solid #d1d5db; background: white; cursor: pointer; color: #374151;
+}
+.btn-week-nav:hover { background: #f3f4f6; }
+.btn-week-nav.today { font-weight: 500; color: #1A3A5C; }
+
+.act-table th { font-size: 10px; }
+.act-table td { font-size: 12px; padding: 8px 10px; vertical-align: middle; }
+.act-type-badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  background: #e8edf5; color: #1A3A5C;
+}
+.act-empty { text-align: center; padding: 48px; color: #aaa; font-size: 13px; line-height: 1.8; }
+.week-export {
+  font-size: 11px; color: #888; cursor: pointer; text-decoration: underline;
+  background: none; border: none; padding: 0; margin-left: auto;
+}
+.week-export:hover { color: #1A3A5C; }
+.act-url-link { font-size: 11px; color: #1A3A5C; text-decoration: none; margin-left: 5px; opacity: 0.75; white-space: nowrap; }
+.act-url-link:hover { opacity: 1; text-decoration: underline; }
+
+/* Tailor modal */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  z-index: 1000; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: white; border-radius: 12px; padding: 22px 24px;
+  max-width: 560px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.modal-title { font-size: 15px; font-weight: 700; color: #1A3A5C; margin-bottom: 4px; }
+.modal-sub { font-size: 12px; color: #888; margin-bottom: 12px; }
+.modal-prompt {
+  width: 100%; font-size: 12px; font-family: inherit; color: #374151;
+  border: 1px solid #d1d5db; border-radius: 6px; padding: 10px 12px;
+  resize: none; height: 180px; line-height: 1.5; background: #f9fafb;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; align-items: center; }
+.modal-hint { font-size: 11px; color: #aaa; flex: 1; }
+.btn-copy {
+  padding: 7px 18px; font-size: 12px; border-radius: 6px;
+  border: none; background: #1A3A5C; color: white; cursor: pointer; font-weight: 500;
+}
+.btn-copy:hover { background: #152d47; }
+.btn-copy.copied { background: #1b7a3e; }
+.btn-modal-close {
+  padding: 7px 14px; font-size: 12px; border-radius: 6px;
+  border: 1px solid #d1d5db; background: white; color: #555; cursor: pointer;
+}
+.btn-modal-close:hover { background: #f3f4f6; }
+
+/* Add activity form */
+.add-job-section {
+  background: white; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  margin-bottom: 14px; overflow: hidden;
+}
+.add-job-toggle {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  cursor: pointer; user-select: none; font-size: 13px; font-weight: 500; color: #1A3A5C;
+  border: none; background: none; width: 100%; text-align: left;
+}
+.add-job-toggle:hover { background: #f7f9ff; }
+.add-job-toggle .chevron { font-size: 10px; transition: transform 0.2s; }
+.add-job-toggle.open .chevron { transform: rotate(90deg); }
+.add-job-form {
+  display: none; padding: 14px 16px 16px; border-top: 1px solid #f0f2f5;
+  grid-template-columns: 1fr 1fr; gap: 10px 16px;
+}
+.add-job-form.open { display: grid; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group.full-width { grid-column: 1 / -1; }
+.form-label { font-size: 11px; font-weight: 500; color: #555; }
+.form-input, .form-select {
+  padding: 6px 9px; font-size: 12px; border: 1px solid #d1d5db;
+  border-radius: 5px; font-family: inherit; color: #1a1a2e;
+}
+.form-input:focus, .form-select:focus { outline: none; border-color: #1A3A5C; }
+.form-actions { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.btn-add-submit {
+  padding: 6px 16px; font-size: 12px; border-radius: 5px;
+  border: none; background: #1A3A5C; color: white; cursor: pointer; font-weight: 500;
+}
+.btn-add-submit:hover { background: #152d47; }
+.btn-cancel {
+  padding: 6px 14px; font-size: 12px; border-radius: 5px;
+  border: 1px solid #d1d5db; background: white; color: #555; cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     PRELOADED DATA — injected by daily-job-search scheduled task.
+     DO NOT change the marker comment lines — the task uses them for replacement.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script>// PRELOADED_JOBS_START
+// Populated by the daily scheduled task — leave empty in this template
+const PRELOADED_JOBS = [];
+const PRELOADED_TIMESTAMP = null; // Set by daily task injection
+// PRELOADED_JOBS_END
+</script>
+
+<!-- Dismiss reason modal -->
+<div class="modal-overlay" id="dismiss-modal" onclick="if(event.target===this)cancelDismiss()">
+  <div class="modal-box" style="max-width:460px;">
+    <div class="modal-title" style="color:#991b1b;">Why are you dismissing this role?</div>
+    <div class="modal-sub">Your feedback improves future scoring for similar roles.</div>
+    <div class="dismiss-chips" id="dismiss-chips"></div>
+    <input class="dismiss-input" id="dismiss-input" placeholder="Add a note (optional)…" />
+    <div class="modal-actions" style="margin-top:12px;">
+      <button class="btn-modal-close" onclick="cancelDismiss()">Cancel</button>
+      <button class="btn-copy" style="background:#991b1b;" onclick="confirmDismiss()">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tailor prompt modal -->
+<div class="modal-overlay" id="tailor-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Tailor Resume</div>
+    <div class="modal-sub">Copy this prompt and paste it into your Claude chat:</div>
+    <textarea class="modal-prompt" id="modal-prompt" readonly></textarea>
+    <div class="modal-actions">
+      <span class="modal-hint">Paste into chat → Claude will tailor &amp; save the files<br><span style="font-size:11px;color:#94a3b8;">Tip: add a <code>skills_profile.md</code> to your jobsearch folder to give Claude standing rules for resume tailoring.</span></span>
+      <button class="btn-modal-close" onclick="closeModal()">Close</button>
+      <button class="btn-copy" id="btn-copy" onclick="copyPrompt()">Copy prompt</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ UI ═══ -->
+<div class="header-row">
+  <h1>🎯 Job Match Dashboard</h1>
+  <span id="source-pill" class="source-pill"></span>
+</div>
+<div class="subtitle" id="subtitle">Loading…</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('matches')" data-tab="matches">Matches</div>
+  <div class="tab" onclick="switchTab('activities')" data-tab="activities" id="act-tab-label">Job Search Log</div>
+  <div class="tab" onclick="switchTab('resumes')" data-tab="resumes">Resumes</div>
+  <div class="tab" onclick="switchTab('settings')" data-tab="settings">⚙ Settings</div>
+</div>
+
+<!-- Matches panel -->
+<div id="tab-matches" class="tab-panel active">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+    <button id="btn-live-search" onclick="run(true)" style="font-size:12px;padding:5px 14px;background:white;border:1px solid #94a3b8;border-radius:6px;color:#475569;cursor:pointer;">🔍 Live Search</button>
+  </div>
+  <div id="loading-area" class="loading">
+    <div><div class="spinner"></div></div>
+    <div class="status-msg" id="status-msg">Starting searches…</div>
+  </div>
+  <div id="matches-content" style="display:none;">
+    <div class="stats-bar" id="stats-bar"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Score</th><th>Role</th><th>Company</th>
+            <th>Type</th><th>Salary</th><th>Posted</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="job-rows"></tbody>
+      </table>
+    </div>
+    <div class="disclaimer" id="disclaimer"></div>
+    <div style="font-size:11px;color:#aaa;margin-top:6px;padding:0 2px;" id="key-status"></div>
+    <div id="pipeline-bar" style="display:none;" class="pipeline-bar"></div>
+  </div>
+  <div id="matches-error"></div>
+</div>
+
+<!-- Job Search Log panel -->
+<div id="tab-activities" class="tab-panel">
+
+  <!-- Week banner -->
+  <div class="week-banner" id="act-week-banner">
+    <div>
+      <div class="week-label">Week of</div>
+      <div class="week-range" id="act-week-range">—</div>
+    </div>
+    <div style="text-align:center;">
+      <div class="week-count" id="act-week-count">0</div>
+      <div class="week-req">of 5 required</div>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="act-progress" style="width:0%"></div></div>
+      <div style="font-size:10px;color:#aaa;margin-top:4px;" id="act-progress-label"></div>
+    </div>
+    <div class="week-nav">
+      <button class="btn-week-nav" onclick="shiftActWeek(-1)">◀ Prev</button>
+      <button class="btn-week-nav today" onclick="resetActWeek()">This week</button>
+      <button class="btn-week-nav" onclick="shiftActWeek(1)">Next ▶</button>
+    </div>
+    <button class="week-export" onclick="exportActCsv()">Export CSV</button>
+  </div>
+
+  <!-- Add activity form -->
+  <div class="add-job-section">
+    <button class="add-job-toggle" id="add-act-toggle" onclick="toggleActForm()">
+      <span class="chevron">▶</span> ＋ Log a job search activity
+    </button>
+    <div class="add-job-form" id="add-act-form">
+      <div class="form-group">
+        <label class="form-label">Date *</label>
+        <input class="form-input" id="ac-date" type="date" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Activity Type *</label>
+        <select class="form-select" id="ac-type" onchange="updateActFormFields()">
+          <option value="Job Application">Job Application</option>
+          <option value="Employer Contact">Employer Contact</option>
+          <option value="Interview">Interview</option>
+          <option value="Job Fair / Career Event">Job Fair / Career Event</option>
+          <option value="Networking">Networking</option>
+          <option value="Employment Agency">Employment Agency</option>
+          <option value="Skills Training / Workshop">Skills Training / Workshop</option>
+          <option value="Resume / Profile Update">Resume / Profile Update</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" id="ac-employer-grp">
+        <label class="form-label" id="ac-employer-lbl">Employer / Organization</label>
+        <input class="form-input" id="ac-employer" placeholder="" />
+      </div>
+      <div class="form-group" id="ac-contact-grp">
+        <label class="form-label" id="ac-contact-lbl">Contact Name</label>
+        <input class="form-input" id="ac-contact" placeholder="" />
+      </div>
+      <div class="form-group" id="ac-method-grp">
+        <label class="form-label" id="ac-method-lbl">Method</label>
+        <select class="form-select" id="ac-method"></select>
+      </div>
+      <div class="form-group" id="ac-role-grp">
+        <label class="form-label" id="ac-role-lbl">Position / Role</label>
+        <input class="form-input" id="ac-role" placeholder="" />
+      </div>
+      <div class="form-group full-width" id="ac-url-grp" style="display:none;">
+        <label class="form-label" id="ac-url-lbl">Job Listing URL</label>
+        <input class="form-input" id="ac-url" type="url" placeholder="https://..." />
+      </div>
+      <div class="form-group" id="ac-appstatus-grp" style="display:none;">
+        <label class="form-label">Application Status</label>
+        <select class="form-select" id="ac-appstatus">
+          <option value="applied">Applied</option>
+          <option value="screen">Phone Screen</option>
+          <option value="interviewing">Interviewing</option>
+          <option value="offer">Offer Received</option>
+          <option value="rejected">Rejected</option>
+          <option value="withdrawn">Withdrawn</option>
+          <option value="no_response">No Response</option>
+        </select>
+      </div>
+      <div class="form-group" id="ac-appstatusnote-grp" style="display:none;">
+        <label class="form-label">Status Details / Next Steps</label>
+        <input class="form-input" id="ac-appstatusnote" placeholder="e.g. Interview with Jane on Tue, waiting to hear back…" />
+      </div>
+      <div class="form-group full-width">
+        <label class="form-label" id="ac-notes-lbl">Notes</label>
+        <input class="form-input" id="ac-notes" placeholder="Details, outcome, follow-up needed…" />
+      </div>
+      <div class="form-actions">
+        <button class="btn-cancel" id="act-cancel-btn" onclick="cancelEditActivity();toggleActForm();">Cancel</button>
+        <button class="btn-add-submit" id="act-submit-btn" onclick="submitActivity()">Log Activity</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity table -->
+  <div class="table-wrap">
+    <table class="act-table">
+      <thead>
+        <tr>
+          <th style="width:80px;">Date</th>
+          <th style="width:130px;">Type</th>
+          <th>Employer / Org</th>
+          <th>Role</th>
+          <th style="width:120px;">Status</th>
+          <th style="width:60px;">Method</th>
+          <th>Notes</th>
+          <th style="width:36px;"></th>
+        </tr>
+      </thead>
+      <tbody id="act-rows"></tbody>
+    </table>
+  </div>
+  <div style="font-size:11px;color:#bbb;margin-top:8px;padding:0 2px;">
+    <span id="act-footer-note">Keep records of all job search activities for at least 2 years in case of audit.</span>
+  </div>
+</div>
+
+<!-- Resumes panel -->
+<div id="tab-resumes" class="tab-panel">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <div>
+      <div style="font-weight:700;color:#1A3A5C;font-size:15px;">Resume Library</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Files in <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">jobsearch/resumes/</code> on your computer</div>
+    </div>
+    <button class="btn-add" onclick="toggleResumeForm()">+ Add</button>
+  </div>
+  <div class="resume-add-form" id="resume-add-form">
+    <h4>Add Resume or Cover Letter</h4>
+    <div class="rf-row">
+      <input id="rf-file" placeholder="File name (e.g. YourName_resume_Acme.docx)" style="flex:2;">
+      <select id="rf-type">
+        <option value="tailored">Tailored Resume</option>
+        <option value="base">Base Resume</option>
+        <option value="cover">Cover Letter</option>
+      </select>
+    </div>
+    <div class="rf-row">
+      <input id="rf-company" placeholder="Company">
+      <input id="rf-role" placeholder="Role / Position">
+      <input id="rf-date" type="date">
+    </div>
+    <div class="rf-row">
+      <select id="rf-folder">
+        <option value="resumes/">Active (resumes/)</option>
+        <option value="resumes/archived/">Archived (resumes/archived/)</option>
+      </select>
+      <button onclick="saveNewResume()" style="padding:6px 16px;background:#1A3A5C;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save</button>
+      <button onclick="toggleResumeForm()" style="padding:6px 14px;background:white;border:1px solid #d1d5db;border-radius:5px;cursor:pointer;font-size:13px;">Cancel</button>
+    </div>
+  </div>
+  <div class="r-section">Active <span class="r-count" id="active-r-count">0</span></div>
+  <table class="resume-table">
+    <thead><tr><th>File</th><th>Company</th><th>Role</th><th>Date</th><th>Type</th><th></th></tr></thead>
+    <tbody id="active-r-rows"></tbody>
+  </table>
+  <div class="r-section" style="margin-top:20px;">
+    Archived <span class="r-count" id="archived-r-count">0</span>
+    <button id="archived-r-toggle" onclick="toggleArchivedResumes()" style="font-size:11px;padding:2px 8px;border:1px solid #e2e8f0;border-radius:4px;background:white;cursor:pointer;color:#64748b;margin-left:4px;">Hide</button>
+  </div>
+  <div id="archived-r-section">
+    <table class="resume-table">
+      <thead><tr><th>File</th><th>Company</th><th>Role</th><th>Date</th><th>Type</th><th></th></tr></thead>
+      <tbody id="archived-r-rows"></tbody>
+    </table>
+  </div>
+  <div style="font-size:11px;color:#bbb;margin-top:12px;">When Claude tailors a new resume, it will be added here. Archive once you&#x2019;ve submitted the application.</div>
+</div>
+
+<div id="tab-settings" class="tab-panel">
+  <div class="settings-wrap">
+    <div style="margin-bottom:16px;">
+      <div style="font-weight:700;color:#1A3A5C;font-size:15px;">Search Settings</div>
+    </div>
+    <div class="settings-section">
+      <h3>Your Profile</h3>
+      <div class="settings-row">
+        <div class="settings-field"><label>Your Name</label><input id="st-name" placeholder="e.g. Jane Smith" /></div>
+        <div class="settings-field"><label>Location</label><input id="st-location" placeholder="e.g. Boulder, CO" /></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-field"><label>Brief Skills Summary (sent to AI scorer)</label>
+          <textarea id="st-profile" rows="4" placeholder="Describe your background, key skills, years of experience..."></textarea></div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>Job Preferences</h3>
+      <div class="settings-row">
+        <div class="settings-field"><label>Work Arrangement <span style="font-weight:400;color:#94a3b8">(check all you'll consider)</span></label>
+          <div class="settings-radio-group">
+            <label><input type="checkbox" name="st-arrange" value="remote"> Remote</label>
+            <label><input type="checkbox" name="st-arrange" value="hybrid"> Hybrid</label>
+            <label><input type="checkbox" name="st-arrange" value="onsite"> On-site</label>
+          </div>
+        </div>
+        <div class="settings-field"><label>Commute Range (miles) <span style="font-weight:400;color:#94a3b8">for hybrid &amp; on-site</span></label>
+          <input id="st-commute" type="number" min="0" step="5" placeholder="e.g. 25 (0 = anywhere local)" />
+        </div>
+        <div class="settings-field"><label>Minimum Salary (annual, 0 = no filter)</label>
+          <input id="st-minsalary" type="number" min="0" step="5000" placeholder="e.g. 80000" />
+          <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-weight:400;font-size:12px;cursor:pointer;">
+            <input type="checkbox" id="st-hide-no-salary"> Hide jobs with no salary listed
+          </label>
+        </div>
+        <div class="settings-field"><label>Defense / Security Clearance Roles</label>
+          <div class="settings-radio-group">
+            <label><input type="radio" name="st-defense" value="penalize"> Include but rank lower (&#x2212;2 penalty)</label>
+            <label><input type="radio" name="st-defense" value="exclude"> Exclude entirely</label>
+            <label><input type="radio" name="st-defense" value="include"> Include normally</label>
+          </div>
+        </div>
+        <div class="settings-field"><label>Weekly Activity Goal <span style="font-weight:400;color:#94a3b8">— for unemployment tracking</span></label>
+          <input id="st-week-goal" type="number" min="1" step="1" style="width:80px;" placeholder="5" />
+          <div style="font-size:11px;color:#64748b;margin-top:4px;">Number of job search activities required per week by your state&#x2019;s unemployment office. Colorado default is 5. Check your state&#x2019;s requirements if different.</div>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
+        <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Local Metro Cities <span style="font-weight:400;color:#94a3b8">— hybrid &amp; on-site roles outside this list are excluded</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated. Auto-fill uses your Location (Profile) + Commute Range above.</div>
+        <textarea id="st-metro" rows="2" style="width:100%;box-sizing:border-box;" placeholder="boulder, denver, broomfield, westminster..."></textarea>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+          <button id="btn-autofill-metro" onclick="autoFillMetroCities()" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">🗺 Auto-fill from location &amp; commute range</button>
+          <span id="autofill-status" style="font-size:11px;color:#94a3b8;"></span>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>Scoring</h3>
+      <div class="settings-field">
+        <label>Score Penalty Keywords <span style="font-weight:400;color:#94a3b8">— jobs mentioning these get a &minus;1 score</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated terms. Use for technologies or industries you&#x2019;d rather deprioritize. Leave blank for no penalty. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">java, selenium, playwright, appium</code></div>
+        <input id="st-penalty-terms" class="form-input" placeholder="e.g. java, selenium, playwright, appium, c#" style="width:100%;box-sizing:border-box;" />
+      </div>
+    </div>
+    <div class="settings-section">
+      <h3>Search Terms</h3>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Job titles and keywords to search across all job boards (one per line). The dashboard handles service-specific formatting automatically.</div>
+      <div class="settings-field">
+        <label>Search Terms <span style="font-weight:400;color:#94a3b8">(applied to Dice, Indeed, and ZipRecruiter)</span></label>
+        <textarea id="st-terms" rows="6" placeholder="senior QA engineer&#10;SDET&#10;test automation engineer&#10;quality engineer python"></textarea>
+      </div>
+      <details style="margin-top:10px;">
+        <summary style="font-size:12px;color:#64748b;cursor:pointer;user-select:none;padding:4px 0;">⚙ Advanced: add extra terms per service (in addition to Search Terms above)</summary>
+        <div style="margin-top:10px;" class="settings-row">
+          <div class="settings-field"><label style="font-size:12px;">Dice extras <span style="font-weight:400;color:#94a3b8">(appends "remote" automatically)</span></label>
+            <textarea id="st-dice" rows="4" placeholder="e.g. quality engineer selenium remote"></textarea></div>
+          <div class="settings-field"><label style="font-size:12px;">Indeed extras <span style="font-weight:400;color:#94a3b8">(keyword | location format)</span></label>
+            <textarea id="st-indeed" rows="4" placeholder="e.g. quality engineer selenium | remote"></textarea></div>
+          <div class="settings-field"><label style="font-size:12px;">ZipRecruiter extras</label>
+            <textarea id="st-zr" rows="4" placeholder="e.g. quality engineer selenium"></textarea></div>
+        </div>
+      </details>
+    </div>
+    <div class="settings-section" style="background:#f8fafc;">
+      <h3>Data Backup</h3>
+      <div style="font-size:13px;color:#64748b;margin-bottom:12px;">
+        All dashboard data is stored in browser storage. Export a backup regularly so you don&#x2019;t lose your activity log, settings, or resume library if storage is cleared.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+        <button onclick="exportData()" style="font-size:13px;padding:7px 16px;background:#1A3A5C;border:none;border-radius:6px;color:white;cursor:pointer;">&#x2193; Export Backup</button>
+        <label style="font-size:13px;padding:7px 16px;background:white;border:1px solid #94a3b8;border-radius:6px;color:#475569;cursor:pointer;">
+          &#x2191; Import Backup<input type="file" accept=".json" onchange="importData(this)" style="display:none;">
+        </label>
+        <span id="backup-msg" style="display:none;color:#16a34a;font-size:13px;font-weight:600;"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <label style="font-size:13px;color:#374151;font-weight:600;">Auto-backup:</label>
+        <select id="st-auto-backup" style="font-size:13px;padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;">
+          <option value="0">Off</option>
+          <option value="1">Every hour</option>
+          <option value="4">Every 4 hours</option>
+          <option value="24">Daily</option>
+        </select>
+        <span style="font-size:11px;color:#94a3b8;">Saves to your Downloads folder while the dashboard is open.</span>
+      </div>
+    </div>
+    <div class="settings-section" style="background:#f8fafc;">
+      <h3>Reset</h3>
+      <div style="font-size:13px;color:#64748b;margin-bottom:10px;">Clear all settings and revert to built-in defaults.</div>
+      <div id="reset-confirm-wrap" style="display:flex;align-items:center;gap:10px;">
+        <button id="btn-reset-init" onclick="showResetConfirm()" style="font-size:13px;padding:7px 16px;background:white;border:1px solid #fca5a5;border-radius:6px;color:#dc2626;cursor:pointer;">Reset to Defaults</button>
+        <span id="reset-confirm-row" style="display:none;align-items:center;gap:8px;">
+          <span style="font-size:13px;color:#dc2626;font-weight:600;">Are you sure?</span>
+          <button onclick="resetSettings()" style="font-size:13px;padding:5px 14px;background:#dc2626;border:none;border-radius:6px;color:white;cursor:pointer;">Yes, Reset</button>
+          <button onclick="hideResetConfirm()" style="font-size:13px;padding:5px 14px;background:white;border:1px solid #94a3b8;border-radius:6px;color:#475569;cursor:pointer;">Cancel</button>
+        </span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;padding:16px 0 8px;">
+      <button class="btn-save-settings" onclick="saveSettingsForm()">Save Settings</button>
+      <span class="settings-saved-msg" id="settings-saved-msg">&#x2713; Saved!</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── MCP tool IDs ─────────────────────────────────────────────────────────────
+// ─── ⚠️  SETUP REQUIRED: MCP Tool IDs ────────────────────────────────────────
+// These IDs are specific to your Cowork plugin installation.
+// To find yours: open a Claude conversation and ask:
+//   "What are the exact tool names for Dice, Indeed/JSearch, and ZipRecruiter job search?"
+// Then replace the values below with your own IDs.
+// Format: mcp__{uuid}__{tool_name}
+const DICE_TOOL   = 'mcp__b0b0549b-bf32-4d46-9b0c-b3315e78be7b__search_jobs'; // ← replace
+const INDEED_TOOL = 'mcp__488f41d8-7ab4-4647-88f2-ba14dd0aaa6f__search_jobs'; // ← replace
+const ZR_TOOL     = 'mcp__c73855fe-5ca0-4178-9fe0-23de8bc7512b__search_jobs'; // ← replace
+// ──────────────────────────────────────────────────────────────────────────────
+
+// ─── Persistence keys ─────────────────────────────────────────────────────────
+const CACHE_KEY     = 'jd_job_cache';
+const APPS_KEY      = 'jd_applications';
+const DISMISSED_KEY = 'jd_dismissed';
+const ACT_KEY       = 'jd_activities';
+const RESUME_KEY    = 'jd_resumes';
+const SETTINGS_KEY  = 'jd_settings';
+// ACT_WEEK_REQ is read from settings (weeklyActivityGoal, default 5) — see refreshActBadge / renderActivities
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+const DEFAULT_SETTINGS = {
+  candidateName: '', location: '', profile: '',
+  workArrangements: ['remote'], commuteRangeMiles: 0, minSalary: 0, hideNoSalary: false, defensePreference: 'penalize',
+  weeklyActivityGoal: 5,
+  autoBackupIntervalHours: 0,
+  scorePenaltyTerms: [],
+  searchTerms: null,
+  diceSearchTerms: null, indeedSearchTerms: null, zrSearchTerms: null, localMetroCities: null,
+};
+function getSettings() {
+  try { const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); return s ? {...DEFAULT_SETTINGS,...s} : {...DEFAULT_SETTINGS}; }
+  catch { return {...DEFAULT_SETTINGS}; }
+}
+function setSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} }
+function getEffectiveDiceSearches() {
+  const s=getSettings();
+  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms.map(t=>t+' remote') : DICE_SEARCHES;
+  const extra = s.diceSearchTerms&&s.diceSearchTerms.length ? s.diceSearchTerms : [];
+  return [...new Set([...base, ...extra])];
+}
+function getEffectiveIndeedSearches() {
+  const s=getSettings();
+  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms.map(t=>({q:t,loc:'remote'})) : INDEED_SEARCHES;
+  const extra = s.indeedSearchTerms&&s.indeedSearchTerms.length
+    ? s.indeedSearchTerms.map(line=>{ const [q,loc]=line.split('|').map(x=>x.trim()); return {q:q||line.trim(),loc:loc||'remote'}; })
+    : [];
+  // dedupe by q value
+  const seen=new Set(base.map(x=>x.q));
+  return [...base, ...extra.filter(x=>!seen.has(x.q))];
+}
+function getEffectiveZrSearches() {
+  const s=getSettings();
+  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms : ZR_SEARCHES;
+  const extra = s.zrSearchTerms&&s.zrSearchTerms.length ? s.zrSearchTerms : [];
+  return [...new Set([...base, ...extra])];
+}
+function getEffectiveLocalAreaRe() {
+  const s=getSettings();
+  if (!s.localMetroCities||!s.localMetroCities.length) return LOCAL_AREA_RE;
+  const cities=['remote',...s.localMetroCities].map(c=>c.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  return new RegExp('\\b('+cities.join('|')+')\\b','i');
+}
+function isDefenseRole(job) {
+  const t=[job.title,job.summary,job.companyName].filter(Boolean).join(' ').toLowerCase();
+  return /clearance|secret|top secret|\bdod\b|military|defense contractor|homeland security/.test(t);
+}
+function getJobArrangement(job) {
+  const types = (job.workplaceTypes || []).join(' ').toLowerCase();
+  if (job.isRemote || types.includes('remote')) return 'remote';
+  if (types.includes('hybrid')) return 'hybrid';
+  return 'onsite';
+}
+function meetsWorkArrangement(job, cfg) {
+  const arr = cfg.workArrangements || ['remote'];
+  if (!arr.length) return true;
+  return arr.includes(getJobArrangement(job));
+}
+function meetsMinSalary(job, min, hideNoSalary) {
+  const nums = (job.salary||'').match(/\d[\d,]*/g);
+  if (!nums) return !hideNoSalary; // no salary listed — include or exclude based on setting
+  if (!min||min<=0) return true;
+  const maxVal=Math.max(...nums.map(n=>parseInt(n.replace(/,/g,''))));
+  return (maxVal<1000?maxVal*1000:maxVal)>=min;
+}
+
+// ─── Candidate profile ────────────────────────────────────────────────────────
+// ─── ⚠️  SETUP REQUIRED: Your Candidate Profile ─────────────────────────────
+// This text is sent to Claude when scoring job matches. Be specific about your
+// skills, seniority, location, and what you're looking for. You can also edit
+// this directly in the Settings tab → Your Profile after setup.
+const PROFILE = `[YOUR PROFILE HERE — e.g.:]
+Senior Software Engineer, 10+ years experience. Austin TX. Remote preferred.
+
+CORE SKILLS:
+Python, JavaScript, React, Node.js, AWS, Docker, Kubernetes, CI/CD (GitHub Actions)
+
+DOMAIN EXPERIENCE:
+SaaS product development, fintech, REST/GraphQL APIs, Agile
+
+Location: [City, State]. [Remote / Hybrid / On-site] preferred. Senior-level only.`;
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DICE_SEARCHES = [
+  'senior quality engineer remote',
+  'senior QA engineer automation python',
+  'SDET senior remote',
+  'quality engineer storage cloud saas',
+  'test automation engineer saas',
+];
+const INDEED_SEARCHES = [
+  {q:'senior software engineer', loc:'remote'},
+  {q:'staff software engineer', loc:'remote'},
+];
+
+// ─── Global state ─────────────────────────────────────────────────────────────
+let JOB_MAP = {};
+let CURRENT_SCORED       = [];
+let CURRENT_NEW_JOB_IDS  = new Set();
+let CURRENT_SCORING_FAIL = false;
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+function getCache()     { try { return JSON.parse(localStorage.getItem(CACHE_KEY)||'{}');   } catch { return {}; } }
+function setCache(c)    { try { localStorage.setItem(CACHE_KEY, JSON.stringify(c));          } catch {} }
+function getApps()      { try { return JSON.parse(localStorage.getItem(APPS_KEY)||'{}');    } catch { return {}; } }
+function setApps(a)     { try { localStorage.setItem(APPS_KEY, JSON.stringify(a));           } catch {} }
+function getDismissedMap() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(DISMISSED_KEY) || 'null');
+    if (!raw) return {};
+    if (Array.isArray(raw)) {
+      const obj = {};
+      for (const g of raw) obj[g] = { reason: '', dismissedAt: 0 };
+      return obj;
+    }
+    return raw;
+  } catch { return {}; }
+}
+function getDismissed() { return new Set(Object.keys(getDismissedMap())); }
+function setDismissedMap(m) { try { localStorage.setItem(DISMISSED_KEY, JSON.stringify(m)); } catch {} }
+function getActs()      { try { return JSON.parse(localStorage.getItem(ACT_KEY)||'{}');        } catch { return {}; } }
+function setActs(a)     { try { localStorage.setItem(ACT_KEY, JSON.stringify(a));              } catch {} }
+
+// Build a Set of "normalizedCompany|normalizedTitle" for all logged job applications.
+// Prevents applied jobs from re-appearing when they get new GUIDs on re-post.
+function normalizeForMatch(s) {
+  return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+function getAppliedJobKeys() {
+  const keys = new Set();
+  for (const a of Object.values(getActs())) {
+    if (a.type === 'Job Application' && a.employer && a.role) {
+      keys.add(normalizeForMatch(a.employer) + '|' + normalizeForMatch(a.role));
+    }
+  }
+  return keys;
+}
+
+// Build a Set of "normalizedCompany|normalizedTitle" for all dismissed jobs.
+// Prevents re-posted jobs with new GUIDs from bypassing the dismiss filter.
+function getDismissedJobKeys() {
+  const keys = new Set();
+  for (const entry of Object.values(getDismissedMap())) {
+    if (entry.companyName && entry.title) {
+      keys.add(normalizeForMatch(entry.companyName) + '|' + normalizeForMatch(entry.title));
+    }
+  }
+  return keys;
+}
+
+// ─── Migrate legacy jd_applications → jd_activities (once) ──────────────────
+// Remove empty fromApply activity entries created by the old migration bug.
+// These were created when migrateAppsToActivities ran but apps[guid] had no
+// companyName/title because markApplied() wasn't storing them.
+function cleanupEmptyApplyActivities() {
+  const acts = getActs();
+  let changed = false;
+  for (const [id, a] of Object.entries(acts)) {
+    if (a.fromApply && !a.employer && !a.role) {
+      delete acts[id];
+      changed = true;
+    }
+  }
+  if (changed) setActs(acts);
+}
+
+function migrateAppsToActivities() {
+  const apps = getApps();
+  const acts = getActs();
+  let changed = false;
+  for (const [guid, app] of Object.entries(apps)) {
+    const actKey = 'approw_' + guid;
+    if (!acts[actKey] && !acts['apply_' + guid]) {
+      const dateMs  = app.appliedDate || Date.now();
+      const dateStr = new Date(dateMs).toISOString().slice(0,10);
+      acts[actKey] = {
+        id: actKey, type: 'Job Application', date: dateStr,
+        employer: app.companyName || '',
+        role:     app.title || '',
+        method:   app.source || 'Online',
+        contact:  '',
+        notes:    app.notes || '',
+        url:      app.detailsPageUrl || '',
+        fromApply: true,
+        createdAt: dateMs,
+      };
+      changed = true;
+    }
+  }
+  if (changed) setActs(acts);
+}
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'activities') renderActivities();
+  if (name === 'resumes')    renderResumes();
+  if (name === 'settings')   loadSettingsForm();
+  if (name === 'matches')    renderPipeline();
+}
+
+// ─── Application status config ───────────────────────────────────────────────
+const APP_STATUSES = [
+  { value: 'applied',      label: 'Applied',        color: '#1A3A5C', bg: '#e8edf5' },
+  { value: 'screen',       label: 'Phone Screen',   color: '#92400e', bg: '#fef3c7' },
+  { value: 'interviewing', label: 'Interviewing',   color: '#9a3412', bg: '#ffedd5' },
+  { value: 'offer',        label: 'Offer Received', color: '#166534', bg: '#dcfce7' },
+  { value: 'rejected',     label: 'Rejected',       color: '#6b2737', bg: '#fee2e2' },
+  { value: 'withdrawn',    label: 'Withdrawn',      color: '#6b7280', bg: '#f3f4f6' },
+  { value: 'no_response',  label: 'No Response',    color: '#6b7280', bg: '#f0f0f0' },
+];
+function statusInfo(val) {
+  return APP_STATUSES.find(s => s.value === val) || APP_STATUSES[0];
+}
+
+// ─── Activity tracking ────────────────────────────────────────────────────────
+let actWeekOffset = 0;
+let ACT_EDITING_ID = null;
+
+const ACT_FIELD_CONFIG = {
+  'Job Application': {
+    employer: { show: true,  label: 'Employer',        placeholder: 'Company name' },
+    contact:  { show: true,  label: 'Contact Name',    placeholder: 'Recruiter or hiring manager (if known)' },
+    method:   { show: true,  label: 'Applied Via',     options: ['Dice','Indeed','ZipRecruiter','LinkedIn','Company Site','Glassdoor','Referral','Email','Phone','In Person','Other'] },
+    role:     { show: true,  label: 'Position / Role', placeholder: 'Job title applied for' },
+    url:      { show: true,  label: 'Job Listing URL', placeholder: 'https://...' },
+    notes:    { placeholder: 'Notes, referral source, follow-up…' },
+  },
+  'Employer Contact': {
+    employer: { show: true,  label: 'Employer',        placeholder: 'Company name' },
+    contact:  { show: true,  label: 'Contact Name',    placeholder: 'Person you spoke with' },
+    method:   { show: true,  label: 'Method',          options: ['Email','Phone','LinkedIn','Dice','Indeed','Online','In Person'] },
+    role:     { show: true,  label: 'Position / Role', placeholder: 'Role you inquired about' },
+    url:      { show: false },
+    notes:    { placeholder: 'What was discussed, next steps…' },
+  },
+  'Interview': {
+    employer: { show: true,  label: 'Employer',        placeholder: 'Company name' },
+    contact:  { show: true,  label: 'Interviewer(s)',  placeholder: 'Name(s) / panel' },
+    method:   { show: true,  label: 'Format',          options: ['Video','Phone','In Person','Online'] },
+    role:     { show: true,  label: 'Position / Role', placeholder: 'Role you interviewed for' },
+    url:      { show: false },
+    notes:    { placeholder: 'Interview stage, topics covered, follow-up needed…' },
+  },
+  'Job Fair / Career Event': {
+    employer: { show: true,  label: 'Event / Organizer', placeholder: 'Event or host organization name' },
+    contact:  { show: false },
+    method:   { show: false },
+    role:     { show: false },
+    url:      { show: false },
+    notes:    { placeholder: 'Companies met, contacts made, materials distributed…' },
+  },
+  'Networking': {
+    employer: { show: true,  label: 'Their Company / Org', placeholder: 'Company or organization' },
+    contact:  { show: true,  label: 'Person / Contact',    placeholder: 'Name of person you connected with' },
+    method:   { show: true,  label: 'Method',              options: ['In Person','Online','Email','Phone','LinkedIn'] },
+    role:     { show: false },
+    url:      { show: false },
+    notes:    { placeholder: 'Topics discussed, referrals, follow-up planned…' },
+  },
+  'Employment Agency': {
+    employer: { show: true,  label: 'Agency Name',        placeholder: 'Staffing or recruiting agency' },
+    contact:  { show: true,  label: 'Recruiter Name',     placeholder: 'Recruiter you spoke with' },
+    method:   { show: true,  label: 'Method',             options: ['Phone','Email','Online','In Person'] },
+    role:     { show: true,  label: 'Position Discussed', placeholder: 'Role or type of work discussed' },
+    url:      { show: false },
+    notes:    { placeholder: 'Agency focus, positions discussed, next steps…' },
+  },
+  'Skills Training / Workshop': {
+    employer: { show: true,  label: 'Provider / Course', placeholder: 'Training provider or course name' },
+    contact:  { show: false },
+    method:   { show: true,  label: 'Format',            options: ['Online','In Person','Self-Paced'] },
+    role:     { show: false },
+    url:      { show: false },
+    notes:    { placeholder: 'Skills covered, certificate earned, hours completed…' },
+  },
+  'Resume / Profile Update': {
+    employer: { show: false },
+    contact:  { show: false },
+    method:   { show: true,  label: 'Platform / Type', options: ['Resume File','LinkedIn','Dice','Indeed Profile','Glassdoor','Portfolio','Cover Letter','Other'] },
+    role:     { show: false },
+    url:      { show: false },
+    notes:    { placeholder: 'What was updated or improved…' },
+  },
+  'Other': {
+    employer: { show: true,  label: 'Employer / Organization', placeholder: 'Company or organization name' },
+    contact:  { show: true,  label: 'Contact Name',            placeholder: 'Person you interacted with' },
+    method:   { show: true,  label: 'Method',                  options: ['Online','Email','Phone','In Person'] },
+    role:     { show: true,  label: 'Position / Role',         placeholder: 'Role, if applicable' },
+    url:      { show: false },
+    notes:    { placeholder: 'Details, outcome, follow-up needed…' },
+  },
+};
+
+function updateActFormFields() {
+  const type   = document.getElementById('ac-type').value;
+  const config = ACT_FIELD_CONFIG[type] || ACT_FIELD_CONFIG['Other'];
+  const fields = ['employer','contact','method','role','url'];
+  for (const f of fields) {
+    const grp  = document.getElementById('ac-' + f + '-grp');
+    const lbl  = document.getElementById('ac-' + f + '-lbl');
+    const fc   = config[f] || { show: false };
+    const show = fc.show !== false;
+    grp.style.display = show ? '' : 'none';
+    if (!show) continue;
+    if (lbl && fc.label) lbl.textContent = fc.label;
+    if (f === 'method') {
+      const sel = document.getElementById('ac-method');
+      const cur = sel.value;
+      sel.innerHTML = (fc.options || ['Online','Email','Phone','In Person'])
+        .map(o => `<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+    } else if (f !== 'url') {
+      const inp = document.getElementById('ac-' + f);
+      if (inp && fc.placeholder) inp.placeholder = fc.placeholder;
+    } else {
+      const inp = document.getElementById('ac-url');
+      if (inp && fc.placeholder) inp.placeholder = fc.placeholder;
+    }
+  }
+  const notesEl  = document.getElementById('ac-notes');
+  const notesCfg = config.notes || {};
+  if (notesEl && notesCfg.placeholder) notesEl.placeholder = notesCfg.placeholder;
+  const isApp = type === 'Job Application';
+  document.getElementById('ac-appstatus-grp').style.display     = isApp ? '' : 'none';
+  document.getElementById('ac-appstatusnote-grp').style.display = isApp ? '' : 'none';
+}
+
+function getWeekBounds(offset) {
+  const now = new Date();
+  const day = now.getDay();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - day + offset * 7);
+  sunday.setHours(0,0,0,0);
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  saturday.setHours(23,59,59,999);
+  return { start: sunday, end: saturday };
+}
+
+function fmtShortDate(d) {
+  return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+
+function shiftActWeek(delta) { actWeekOffset += delta; renderActivities(); }
+function resetActWeek()      { actWeekOffset = 0;      renderActivities(); }
+
+function toggleActForm() {
+  const form = document.getElementById('add-act-form');
+  const btn  = document.getElementById('add-act-toggle');
+  const open = form.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  if (open) {
+    if (!ACT_EDITING_ID) {
+      document.getElementById('ac-date').value          = new Date().toISOString().slice(0,10);
+      document.getElementById('ac-type').value          = 'Job Application';
+      document.getElementById('ac-employer').value      = '';
+      document.getElementById('ac-contact').value       = '';
+      document.getElementById('ac-role').value          = '';
+      document.getElementById('ac-url').value           = '';
+      document.getElementById('ac-notes').value         = '';
+      document.getElementById('ac-appstatus').value     = 'applied';
+      document.getElementById('ac-appstatusnote').value = '';
+      updateActFormFields();
+    }
+  } else {
+    cancelEditActivity();
+  }
+}
+
+function editActivity(id) {
+  const acts = getActs();
+  const a = acts[id]; if (!a) return;
+  ACT_EDITING_ID = id;
+  document.getElementById('ac-date').value     = a.date || '';
+  document.getElementById('ac-type').value     = a.type || 'Job Application';
+  document.getElementById('ac-employer').value = a.employer || '';
+  document.getElementById('ac-contact').value  = a.contact || '';
+  document.getElementById('ac-method').value   = a.method || 'Online';
+  document.getElementById('ac-role').value     = a.role || '';
+  document.getElementById('ac-url').value           = a.url || '';
+  document.getElementById('ac-notes').value         = a.notes || '';
+  document.getElementById('ac-appstatus').value     = a.appStatus || 'applied';
+  document.getElementById('ac-appstatusnote').value = a.appStatusNote || '';
+  updateActFormFields();
+  document.getElementById('ac-method').value = a.method || 'Online';
+  const form = document.getElementById('add-act-form');
+  const btn  = document.getElementById('add-act-toggle');
+  form.classList.add('open', 'act-form-editing');
+  btn.classList.add('open');
+  let editLabel = document.getElementById('act-edit-label');
+  if (!editLabel) {
+    editLabel = document.createElement('div');
+    editLabel.id = 'act-edit-label';
+    editLabel.className = 'act-form-editing-label';
+    form.prepend(editLabel);
+  }
+  editLabel.innerHTML = '✏️ Editing activity — make changes below, then click Update.';
+  document.getElementById('act-submit-btn').textContent = 'Update Activity';
+  document.getElementById('act-cancel-btn').textContent = 'Cancel Edit';
+  form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function cancelEditActivity() {
+  ACT_EDITING_ID = null;
+  const form = document.getElementById('add-act-form');
+  form.classList.remove('act-form-editing');
+  const lbl = document.getElementById('act-edit-label');
+  if (lbl) lbl.remove();
+  document.getElementById('act-submit-btn').textContent = 'Log Activity';
+  document.getElementById('act-cancel-btn').textContent = 'Cancel';
+}
+
+function submitActivity() {
+  const type = document.getElementById('ac-type').value;
+  const date = document.getElementById('ac-date').value;
+  if (!date) { alert('Date is required.'); return; }
+  const employer = document.getElementById('ac-employer').value.trim();
+  const contact  = document.getElementById('ac-contact').value.trim();
+  const role     = document.getElementById('ac-role').value.trim();
+  const url      = document.getElementById('ac-url').value.trim();
+  const notes    = document.getElementById('ac-notes').value.trim();
+  // Require at least one substantive field to prevent blank entries
+  if (!employer && !contact && !role && !url && !notes) {
+    alert('Please fill in at least one field (employer, role, notes, etc.) before saving.');
+    return;
+  }
+  const acts = getActs();
+  const entry = {
+    type, date, employer, contact, role, url, notes,
+    method:        document.getElementById('ac-method').value,
+    appStatus:     type === 'Job Application' ? document.getElementById('ac-appstatus').value           : undefined,
+    appStatusNote: type === 'Job Application' ? document.getElementById('ac-appstatusnote').value.trim() : undefined,
+  };
+  if (ACT_EDITING_ID) {
+    acts[ACT_EDITING_ID] = { ...acts[ACT_EDITING_ID], ...entry, updatedAt: Date.now() };
+    setActs(acts);
+    cancelEditActivity();
+    const form = document.getElementById('add-act-form');
+    const btn  = document.getElementById('add-act-toggle');
+    form.classList.remove('open');
+    btn.classList.remove('open');
+  } else {
+    const id = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+    acts[id] = { id, ...entry, createdAt: Date.now() };
+    setActs(acts);
+    ['ac-employer','ac-contact','ac-role','ac-url','ac-notes','ac-appstatusnote'].forEach(fid => {
+      document.getElementById(fid).value = '';
+    });
+    document.getElementById('ac-appstatus').value = 'applied';
+  }
+  renderActivities();
+  refreshActBadge();
+}
+
+function removeActivity(id) {
+  if (!confirm('Delete this activity log entry?')) return;
+  const acts = getActs(); delete acts[id]; setActs(acts);
+  renderActivities(); refreshActBadge();
+}
+
+function refreshActBadge() {
+  const ACT_WEEK_REQ = getSettings().weeklyActivityGoal || 5;
+  const { start, end } = getWeekBounds(0);
+  const n = Object.values(getActs()).filter(a => {
+    const d = new Date(a.date + 'T12:00:00');
+    return d >= start && d <= end;
+  }).length;
+  const label = n >= ACT_WEEK_REQ ? `Job Search Log ✓` : `Job Search Log${n ? ' ('+n+'/'+ACT_WEEK_REQ+')' : ''}`;
+  document.getElementById('act-tab-label').textContent = label;
+}
+
+function renderActivities() {
+  const ACT_WEEK_REQ = getSettings().weeklyActivityGoal || 5;
+  refreshActBadge();
+  const { start, end } = getWeekBounds(actWeekOffset);
+  const all = getActs();
+  const ids = Object.keys(all).sort((a,b) => (all[b].date||'').localeCompare(all[a].date||''));
+  const isCurrentWeek = actWeekOffset === 0;
+  document.getElementById('act-week-range').textContent =
+    fmtShortDate(start) + ' – ' + fmtShortDate(end) + (isCurrentWeek ? ' (this week)' : '');
+  const weekIds = new Set(ids.filter(id => {
+    const d = new Date(all[id].date + 'T12:00:00');
+    return d >= start && d <= end;
+  }));
+  const count = weekIds.size;
+  const pct   = Math.min(100, Math.round((count / ACT_WEEK_REQ) * 100));
+  const met   = count >= ACT_WEEK_REQ;
+  const countEl = document.getElementById('act-week-count');
+  countEl.textContent = count;
+  countEl.className = 'week-count ' + (met ? 'met' : count >= 3 ? 'warn' : '');
+  const fill = document.getElementById('act-progress');
+  fill.style.width = pct + '%';
+  fill.className = 'progress-bar-fill' + (met ? ' met' : '');
+  document.getElementById('act-progress-label').textContent = met
+    ? '✓ Weekly requirement met'
+    : `${ACT_WEEK_REQ - count} more needed this week`;
+  const footerNote = document.getElementById('act-footer-note');
+  if (footerNote) footerNote.textContent = `Weekly goal: ${ACT_WEEK_REQ} activities — keep records for at least 2 years in case of audit.`;
+  const tbody = document.getElementById('act-rows');
+  if (!ids.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="act-empty">
+      No activities logged yet.<br>
+      Hit <strong>Mark Applied</strong> on any job in the Matches tab — it logs here automatically.<br>
+      Or use <strong>+ Log a job search activity</strong> above to add any activity manually.<br>
+      <span style="font-size:11px;color:#bbb;">Your weekly goal is ${ACT_WEEK_REQ} — keep records for at least 2 years.</span>
+    </div></td></tr>`;
+    return;
+  }
+  const allRows = ids.map(id => ({ ...all[id], _key: id }))
+    .sort((a, b) => (b.date||'').localeCompare(a.date||''));
+  tbody.innerHTML = allRows.map(a => {
+    const inWeek   = weekIds.has(a._key);
+    const rowStyle = inWeek ? '' : 'opacity:0.55;';
+    const dateStr  = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const urlLink  = a.url
+      ? `<a class="act-url-link" href="${esc(a.url)}" title="${esc(a.url)}" target="_blank">↗ listing</a>`
+      : '';
+    let statusCell = '<td style="font-size:11px;color:#aaa;">—</td>';
+    if (a.type === 'Job Application') {
+      const si = statusInfo(a.appStatus || 'applied');
+      const opts = APP_STATUSES.map(s =>
+        `<option value="${s.value}"${(a.appStatus||'applied')===s.value?' selected':''}>${s.label}</option>`
+      ).join('');
+      const note = a.appStatusNote ? `<div style="font-size:10px;color:#888;margin-top:2px;">${esc(a.appStatusNote)}</div>` : '';
+      statusCell = `<td>
+        <select class="app-status-select" style="color:${si.color};background:${si.bg};"
+          onchange="updateActStatus('${esc(a._key)}',this.value)">${opts}</select>
+        ${note}
+      </td>`;
+    }
+    return `<tr style="${rowStyle}">
+      <td class="date-cell" style="white-space:nowrap;">${dateStr}</td>
+      <td><span class="act-type-badge">${esc(a.type)}</span></td>
+      <td style="color:#444;">${esc(a.employer||'—')}${urlLink}</td>
+      <td style="color:#555;font-size:11px;">${esc(a.role||'—')}</td>
+      ${statusCell}
+      <td style="font-size:11px;color:#777;">${esc(a.method||'')}</td>
+      <td style="font-size:11px;color:#555;">${esc(a.notes||'')}${a.contact?'<br><span style="color:#aaa;">Contact: '+esc(a.contact)+'</span>':''}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-edit-act" onclick="editActivity('${esc(a._key)}')" title="Edit">✏️</button>
+        <button class="btn-remove" onclick="removeActivity('${esc(a._key)}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function exportActCsv() {
+  const { start, end } = getWeekBounds(actWeekOffset);
+  const acts = getActs();
+  const rows = Object.values(acts)
+    .filter(a => { const d = new Date(a.date+'T12:00:00'); return d >= start && d <= end; })
+    .map(a => {
+      const si = a.type === 'Job Application' ? statusInfo(a.appStatus || 'applied').label : '';
+      return [a.date, a.type, a.employer||'', a.role||'', si, a.appStatusNote||'', a.contact||'', a.method||'', a.url||'', a.notes||''];
+    })
+    .sort((a,b) => a[0].localeCompare(b[0]));
+  const csv = [['Date','Type','Employer/Org','Role','Status','Status Notes','Contact','Applied Via / Method','Job URL','Notes'], ...rows]
+    .map(r => r.map(v => '"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url  = URL.createObjectURL(blob);
+  const el   = document.createElement('a');
+  const weekLabel = fmtShortDate(start).replace(' ','-') + '_' + fmtShortDate(end).replace(' ','-');
+  el.href = url; el.download = `job_search_activities_${weekLabel}.csv`; el.click();
+  URL.revokeObjectURL(url);
+}
+
+function updateActStatus(id, newStatus) {
+  const acts = getActs();
+  if (!acts[id]) return;
+  acts[id].appStatus = newStatus;
+  setActs(acts);
+  renderActivities();
+  renderPipeline();
+}
+
+function renderPipeline() {
+  const bar = document.getElementById('pipeline-bar');
+  if (!bar) return;
+  const acts = getActs();
+  const appEntries = Object.values(acts).filter(a => a.type === 'Job Application');
+  if (!appEntries.length) { bar.style.display = 'none'; return; }
+  const counts = {};
+  for (const a of appEntries) {
+    const s = a.appStatus || 'applied';
+    counts[s] = (counts[s] || 0) + 1;
+  }
+  const activeStatuses = ['applied','screen','interviewing','offer'];
+  const total   = appEntries.length;
+  const active  = activeStatuses.reduce((n,s) => n + (counts[s]||0), 0);
+  const chips   = APP_STATUSES
+    .filter(s => counts[s.value])
+    .map(s => `<span class="pipeline-chip" style="background:${s.bg};color:${s.color};">${s.label}: <strong>${counts[s.value]}</strong></span>`)
+    .join('');
+  bar.style.display = '';
+  bar.innerHTML = `
+    <span class="pipeline-label">Pipeline:</span>
+    ${chips}
+    <span style="margin-left:auto;font-size:11px;color:#aaa;">${active} active · ${total} total</span>
+  `;
+}
+
+// ─── Mark Applied ─────────────────────────────────────────────────────────────
+function markApplied(guid) {
+  const job = JOB_MAP[guid]; if (!job) return;
+  const apps = getApps(); if (apps[guid]) return;
+  apps[guid] = {
+    guid,
+    appliedDate:    Date.now(),
+    companyName:    job.companyName || '',
+    title:          job.title || '',
+    source:         job.source || 'Online',
+    detailsPageUrl: job.detailsPageUrl || '',
+  };
+  setApps(apps);
+  const acts   = getActs();
+  const actId  = 'apply_' + guid;
+  const dateStr = new Date().toISOString().slice(0,10);
+  acts[actId] = {
+    id: actId, type: 'Job Application', date: dateStr,
+    employer:      job.companyName || '',
+    role:          job.title || '',
+    method:        job.source || 'Online',
+    contact:       '',
+    url:           job.detailsPageUrl || '',
+    notes:         job.matchReason || '',
+    appStatus:     'applied',
+    appStatusNote: '',
+    fromApply:     true,
+    createdAt:     Date.now(),
+  };
+  setActs(acts);
+  const row = document.querySelector(`.btn-apply[data-guid="${guid}"]`)?.closest('tr');
+  if (row) row.remove();
+  const remaining = document.querySelectorAll('#job-rows tr').length;
+  document.getElementById('subtitle').textContent = `${remaining} matched roles`;
+  switchTab('activities');
+  refreshActBadge();
+  setTimeout(() => {
+    const newRow = document.querySelector('#act-rows tr');
+    if (newRow) {
+      newRow.style.transition = 'background 0.3s';
+      newRow.style.background = '#d1fae5';
+      setTimeout(() => { newRow.style.background = ''; }, 1400);
+    }
+  }, 80);
+}
+
+// ─── Dismiss ──────────────────────────────────────────────────────────────────
+const DISMISS_QUICK_REASONS = [
+  'Not a fit', 'Salary too low', 'Wrong tech stack',
+  'Company not appealing', 'Already applied / seen this',
+  'Too junior', 'Too senior', 'Location / remote policy',
+];
+
+let _dismissGuid = null;
+let _dismissChipSelected = null;
+
+function dismissJob(guid) {
+  _dismissGuid = guid;
+  _dismissChipSelected = null;
+  document.getElementById('dismiss-input').value = '';
+  const container = document.getElementById('dismiss-chips');
+  container.innerHTML = DISMISS_QUICK_REASONS.map(r =>
+    `<button class="dismiss-chip" onclick="selectDismissChip(this,'${esc(r)}')">${esc(r)}</button>`
+  ).join('');
+  document.getElementById('dismiss-modal').classList.add('open');
+  setTimeout(() => document.getElementById('dismiss-input').focus(), 80);
+}
+
+function selectDismissChip(el, reason) {
+  document.querySelectorAll('.dismiss-chip').forEach(c => c.classList.remove('active'));
+  if (_dismissChipSelected === reason) {
+    _dismissChipSelected = null;
+  } else {
+    el.classList.add('active');
+    _dismissChipSelected = reason;
+  }
+}
+
+function cancelDismiss() {
+  _dismissGuid = null;
+  document.getElementById('dismiss-modal').classList.remove('open');
+}
+
+function confirmDismiss() {
+  const guid = _dismissGuid;
+  if (!guid) return;
+  const chip  = _dismissChipSelected || '';
+  const typed = document.getElementById('dismiss-input').value.trim();
+  const reason = [chip, typed].filter(Boolean).join(' — ');
+  const map = getDismissedMap();
+  const job = JOB_MAP[guid];
+  map[guid] = { reason, dismissedAt: Date.now(), companyName: job?.companyName || '', title: job?.title || '' };
+  setDismissedMap(map);
+  document.getElementById('dismiss-modal').classList.remove('open');
+  _dismissGuid = null;
+  const row = document.querySelector(`.btn-dismiss[data-guid="${guid}"]`)?.closest('tr');
+  if (row) row.remove();
+  const remaining = document.querySelectorAll('#job-rows tr').length;
+  document.getElementById('subtitle').textContent = `${remaining} matched roles from Dice · Indeed · ZipRecruiter`;
+}
+
+// ─── Dismissal context for AI scoring ─────────────────────────────────────────
+function getDismissalContext() {
+  const entries = Object.values(getDismissedMap()).filter(d => d.reason);
+  if (!entries.length) return '';
+  const counts = {};
+  for (const { reason } of entries) counts[reason] = (counts[reason] || 0) + 1;
+  const lines = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([r, n]) => `  - "${r}"${n > 1 ? ` (${n}x)` : ''}`)
+    .join('\n');
+  return `\n\nUser feedback from previously dismissed roles (downweight similar jobs):\n${lines}`;
+}
+
+// ─── Tailor resume ────────────────────────────────────────────────────────────
+function tailorResume(guid) {
+  const job = JOB_MAP[guid]; if (!job) return;
+  const urlPart    = job.detailsPageUrl ? `\nJob listing URL: ${job.detailsPageUrl}` : '';
+  const salaryPart = job.salary ? `\nSalary: ${job.salary}` : '';
+  const typePart   = (job.workplaceTypes||[]).join('/') || (job.isRemote ? 'Remote' : '');
+  const safeName   = job.companyName.replace(/[^a-zA-Z0-9]/g,'');
+  const namePrefix = (getSettings().candidateName || 'YourName').split(' ').join('');
+  const prompt = `Please tailor my resume for this job and save it as a Word document (.docx) and PDF in my jobsearch folder.
+
+Job details:
+- Title: ${job.title}
+- Company: ${job.companyName}
+- Type: ${typePart}${salaryPart}${urlPart}
+
+Instructions:
+1. Fetch the job listing URL above to get the full job description (if a URL is provided).
+2. Look in my jobsearch folder for my base resume — a .docx file that is a general master resume (not already tailored for another company). If you cannot find one, stop and tell me: describe what you looked for and ask me to point you to my base resume or confirm its filename.
+3. Tailor the resume: adjust the profile summary, reorder or reword bullets to emphasize skills most relevant to this specific role, and ensure keywords from the job description appear naturally. Do not fabricate experience.
+4. Save the tailored resume as both .docx and .pdf named: ${namePrefix}_resume_${safeName}.docx / ${namePrefix}_resume_${safeName}.pdf in resumes/archived/ (create the folder if it doesn't exist).
+5. Add it to the Resumes tab in the dashboard and share the files when done.`;
+  document.getElementById('modal-title').textContent = `Tailor resume — ${job.title} at ${job.companyName}`;
+  document.getElementById('modal-prompt').value = prompt;
+  document.getElementById('tailor-modal').classList.add('open');
+  // Auto-copy when modal opens
+  const btn = document.getElementById('btn-copy');
+  const sub = document.querySelector('#tailor-modal .modal-sub');
+  btn.textContent = 'Copy prompt'; btn.classList.remove('copied');
+  try {
+    navigator.clipboard.writeText(prompt).then(() => {
+      sub.textContent = '✓ Copied — paste into your Claude chat to start tailoring.';
+    }).catch(() => {
+      sub.textContent = 'Copy the prompt below and paste it into your Claude chat.';
+    });
+  } catch {
+    sub.textContent = 'Copy the prompt below and paste it into your Claude chat.';
+  }
+}
+
+function closeModal() { document.getElementById('tailor-modal').classList.remove('open'); }
+
+function copyPrompt() {
+  const prompt = document.getElementById('modal-prompt').value;
+  const btn    = document.getElementById('btn-copy');
+  try {
+    navigator.clipboard.writeText(prompt).then(() => {
+      btn.textContent = '✓ Copied!'; btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy prompt'; btn.classList.remove('copied'); }, 2000);
+    }).catch(() => { try { document.execCommand('copy'); } catch {} });
+  } catch { try { document.execCommand('copy'); } catch {} }
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function scoreClass(s) {
+  if (s >= 9) return 's9'; if (s >= 8) return 's8'; if (s >= 7) return 's7';
+  if (s >= 6) return 's6'; return 's5';
+}
+function sourceBadgeClass(src) {
+  if (!src) return 'b-other';
+  const s = src.toLowerCase();
+  if (s === 'dice')         return 'b-dice';
+  if (s === 'indeed')       return 'b-indeed';
+  if (s === 'ziprecruiter') return 'b-ziprecruiter';
+  if (s === 'linkedin')     return 'b-linkedin';
+  if (s === 'glassdoor')    return 'b-glassdoor';
+  if (s === 'jsearch')      return 'b-jsearch';
+  return 'b-other';
+}
+function typeInfo(types, isRemote) {
+  const t = (types||[]).join('').toLowerCase();
+  if (isRemote || t.includes('remote')) return {label:'Remote', cls:'t-remote'};
+  if (t.includes('hybrid'))             return {label:'Hybrid', cls:'t-hybrid'};
+  return {label:'On-Site', cls:'t-onsite'};
+}
+function formatDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  if (isNaN(d)) return str.replace(/^\w+ /,'').replace(/, \d{4}$/,'');
+  const diff = Math.floor((Date.now() - d) / 86400000);
+  return diff === 0 ? 'Today' : diff === 1 ? '1d ago' : diff + 'd ago';
+}
+function setStatus(msg) { const el = document.getElementById('status-msg'); if (el) el.textContent = msg; }
+
+// ─── Hybrid location filter ───────────────────────────────────────────────────
+// Update this with cities in your commute radius (or use the Auto-fill button in Settings)
+const LOCAL_AREA_RE = /(remote|your city|nearby city|your state)/i;
+
+function isNonSalaried(job) {
+  const salary  = (job.salary || '').toLowerCase();
+  const empType = (job.employmentType || '').toLowerCase();
+  const summary = (job.summary || '').toLowerCase();
+  if (/\/hr\b|per hour|\/hour/.test(salary)) return true;
+  if (/\bcontract\b|\btemp\b|temporary|part.?time/.test(empType)) return true;
+  if (/\b(c2c|1099|w-?2 contract|contract-to-hire|temp-to-perm|contract position|month contract)\b/.test(summary)) return true;
+  return false;
+}
+
+function isHybridOutsideLocalArea(job) {
+  // Filter both hybrid AND on-site jobs that aren't in the local metro area
+  if (job.isRemote) return false;
+  const types = (job.workplaceTypes || []).join(' ').toLowerCase();
+  if (types.includes('remote')) return false;
+  const loc = (job.jobLocation?.displayName || '').toLowerCase();
+  if (getEffectiveLocalAreaRe().test(loc)) return false;
+  return true;
+}
+
+// ─── AI scoring ───────────────────────────────────────────────────────────────
+function keywordScore(job, penaltyTerms) {
+  const terms = penaltyTerms || [];
+  const t = [job.title,job.summary,job.companyName].filter(Boolean).join(' ').toLowerCase();
+  let s = 4;
+  if (/senior|staff|lead|principal/.test(t)) s++;
+  if (/quality engineer|qa engineer|\bqe\b|sdet|test engineer|software developer in test/.test(t)) s += 2;
+  if (/automation|pytest|python|api test/.test(t)) s++;
+  if (/remote/.test(t) || job.isRemote) s++;
+  if (/clearance|secret|top secret|dod|military|defense|homeland/.test(t)) s = Math.max(1, s-2);
+  if (/junior|associate|entry.level/.test(t)) s = Math.max(1, s-2);
+  if (terms.length) {
+    const penaltyRe = new RegExp(
+      terms.map(term => (/^\w/.test(term) ? '\\b' : '') + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (/\w$/.test(term) ? '\\b' : '')).join('|')
+    );
+    if (penaltyRe.test(t)) s = Math.max(1, s-1);
+  }
+  return Math.min(10, s);
+}
+
+async function scoreJobs(jobs) {
+  if (!jobs.length) return null;
+  const list = jobs.map((j,i) =>
+    `[${i+1}] "${j.title}" at ${j.companyName} | ${(j.workplaceTypes||[]).join('/')||'unknown'} | Salary: ${j.salary||'not listed'} | Source: ${j.source}\nSummary: ${(j.summary||'').slice(0,200)}`
+  ).join('\n\n');
+  const cfg = getSettings();
+  const metro = cfg.localMetroCities && cfg.localMetroCities.length
+    ? cfg.localMetroCities.slice(0,4).join(', ')
+    : (cfg.location ? cfg.location : 'the candidate\'s local area');
+  const penaltyTerms = cfg.scorePenaltyTerms || [];
+  const penaltyLine = penaltyTerms.length
+    ? `\n- Job primarily requires ${penaltyTerms.join(', ')} (not in candidate's stack) = subtract 1`
+    : '';
+  const prompt = `Score these ${jobs.length} job listings for this candidate:
+${PROFILE}${getDismissalContext()}
+
+SCORING: 9-10=Senior QE/SDET/test-automation, remote/hybrid, matching stack. 7-8=good fit. 5-6=partial. 1-4=poor.
+ADJUSTMENTS:
+- Security clearance OR defense/military/homeland = subtract 2 (min 1)
+- Hybrid role outside ${metro} = score 0 (auto-exclude)${penaltyLine}
+
+JOBS:
+${list}
+
+Return ONLY a valid JSON array, no markdown:
+[{"index":1,"score":8,"reason":"Senior SDET, Python/API automation, fully remote"}]`;
+  try {
+    const result = await window.cowork.askClaude(prompt, []);
+    const match = result.match(/\[[\s\S]*?\]/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+    return null;
+  } catch { return null; }
+}
+
+// ─── Job fetching ─────────────────────────────────────────────────────────────
+async function searchDice(keyword) {
+  try {
+    const r = await window.cowork.callMcpTool(DICE_TOOL, {
+      keyword, workplace_types:['Remote','Hybrid'],
+      employment_types:['FULLTIME'], posted_date:'SEVEN', jobs_per_page:15,
+    });
+    const data = r.structuredContent ?? JSON.parse(r.content[0].text);
+    return (data.data||[]).map(j => ({...j, source:'Dice'}));
+  } catch { return []; }
+}
+
+function parseIndeedResults(text) {
+  const jobs = [];
+  if (!text) return jobs;
+  for (const block of text.split(/\n(?=\*\*Job Title:\*\*)/).filter(b=>b.includes('**Job Title:**'))) {
+    const get = f => { const m = block.match(new RegExp(`\\*\\*${f}:\\*\\*\\s*([^\n]+)`)); return m?m[1].trim():''; };
+    const loc = get('Location');
+    const isRemote = loc.toLowerCase().includes('remote');
+    const comp = get('Compensation');
+    jobs.push({
+      guid: 'indeed_' + get('Job Id'),
+      title: get('Job Title').replace(/^\(Remote\)\s*/i,'').trim(),
+      companyName: get('Company'),
+      jobLocation: {displayName: loc},
+      postedDate: get('Posted on'),
+      salary: comp==='N/A'?null:comp,
+      employmentType: get('Job Type'),
+      detailsPageUrl: get('View Job URL'),
+      workplaceTypes: isRemote?['Remote']:['On-Site'],
+      isRemote, source:'Indeed', summary:'',
+    });
+  }
+  return jobs;
+}
+
+async function searchIndeed(q, loc) {
+  try {
+    const r = await window.cowork.callMcpTool(INDEED_TOOL, {search:q, location:loc, country_code:'US', job_type:'fulltime'});
+    return parseIndeedResults(r.structuredContent?.result ?? r.content?.[0]?.text ?? '');
+  } catch { return []; }
+}
+
+const ZR_SEARCHES = ['software engineer', 'senior developer', 'staff engineer'];
+async function searchZipRecruiter(jobRole) {
+  try {
+    const r = await window.cowork.callMcpTool(ZR_TOOL, {
+      job_role: jobRole,
+      location_types: ['REMOTE'],
+      employment_types: ['FULL_TIME'],
+      seniority_classes: ['MID', 'SENIOR'],
+    });
+    const data = r.structuredContent ?? JSON.parse(r.content[0].text);
+    const jobs = data.jobs || data.data || data.results || (Array.isArray(data) ? data : []);
+    return jobs.map(j => {
+      // ZipRecruiter returns salary as {min_annual, max_annual} — format as string
+      let salary = null;
+      if (j.salary && typeof j.salary === 'object') {
+        const lo = j.salary.min_annual, hi = j.salary.max_annual;
+        if (lo && hi) salary = `$${Math.round(lo/1000)}k\u2013$${Math.round(hi/1000)}k`;
+        else if (lo)  salary = `$${Math.round(lo/1000)}k+`;
+      } else if (typeof j.salary === 'string') {
+        salary = j.salary;
+      }
+      // ZipRecruiter returns days_ago, not postedDate
+      let postedDate = j.postedDate || '';
+      if (!postedDate && j.days_ago != null) {
+        const d = new Date();
+        d.setDate(d.getDate() - j.days_ago);
+        postedDate = d.toISOString().slice(0, 10);
+      }
+      // ZipRecruiter uses is_remote (snake_case) and job_redirect_url
+      const isRemote = j.is_remote !== undefined ? j.is_remote : (j.isRemote !== undefined ? j.isRemote : true);
+      return {
+        guid: j.guid || j.id || ('zr_live_' + Math.random().toString(36).slice(2)),
+        title: j.title || j.jobTitle || '',
+        companyName: j.companyName || j.company || '',
+        jobLocation: { displayName: j.jobLocation?.displayName || j.location || 'Remote' },
+        postedDate,
+        salary,
+        employmentType: j.employmentType || j.job_type || 'FULLTIME',
+        detailsPageUrl: j.detailsPageUrl || j.job_redirect_url || j.url || '',
+        workplaceTypes: j.workplaceTypes || (isRemote ? ['Remote'] : ['On-site']),
+        isRemote,
+        source: 'ZipRecruiter',
+        summary: j.summary || j.description || j.benefits || '',
+      };
+    });
+  } catch(e) { console.error('ZR search error', e); return []; }
+}
+
+// ─── Render matches ───────────────────────────────────────────────────────────
+function renderJobRows() {
+  const apps          = getApps();
+  const dismissed     = getDismissed();
+  const appliedKeys   = getAppliedJobKeys();
+  const dismissedKeys = getDismissedJobKeys();
+  const visible = CURRENT_SCORED.filter(j => {
+    if (apps[j.guid]) return false;
+    if (dismissed.has(j.guid)) return false;
+    const key = normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title);
+    if (appliedKeys.has(key)) return false;
+    if (dismissedKeys.has(key)) return false;
+    return true;
+  });
+  if (!visible.length) {
+    document.getElementById('job-rows').innerHTML =
+      `<tr><td colspan="7" class="empty-box">No matching roles found. Check back tomorrow.</td></tr>`;
+  } else {
+    document.getElementById('job-rows').innerHTML = visible.map(j => {
+      const ti    = typeInfo(j.workplaceTypes, j.isRemote);
+      const isNew = CURRENT_NEW_JOB_IDS.has(j.guid);
+      return `<tr class="job-row">
+        <td><span class="score-badge ${scoreClass(j.matchScore)}">${j.matchScore}</span></td>
+        <td>
+          <div>
+            <a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link">${esc(j.title)}</a>
+            <span class="badge ${sourceBadgeClass(j.source)}">${j.source}</span>
+            ${isNew ? '<span class="badge b-new">NEW</span>' : ''}
+          </div>
+          <div class="reason">${esc(j.matchReason||'')}</div>
+        </td>
+        <td style="color:#444;font-size:13px;">${esc(j.companyName||'')}</td>
+        <td><span class="type-badge ${ti.cls}">${ti.label}</span></td>
+        <td class="salary">${esc(j.salary||'—')}</td>
+        <td class="date-cell">${formatDate(j.postedDate)}</td>
+        <td class="action-cell">
+          <button class="btn-apply" data-guid="${esc(j.guid)}"
+            onclick="markApplied('${esc(j.guid)}')">Mark Applied</button>
+          <button class="btn-tailor" data-guid="${esc(j.guid)}"
+            title="Ask Claude to tailor your resume for this role"
+            onclick="tailorResume('${esc(j.guid)}')">&#128196; Tailor</button>
+          <button class="btn-dismiss" data-guid="${esc(j.guid)}"
+            title="Dismiss"
+            onclick="dismissJob('${esc(j.guid)}')">✕</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('subtitle').textContent = `${visible.length} matched roles from Dice · Indeed · ZipRecruiter`;
+}
+
+function renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source) {
+  CURRENT_SCORED      = scored;
+  CURRENT_NEW_JOB_IDS = newJobIds;
+  CURRENT_SCORING_FAIL = scoringFailed;
+  JOB_MAP = {};
+  for (const j of scored) JOB_MAP[j.guid] = j;
+  const remote    = scored.filter(j=>j.isRemote||(j.workplaceTypes||[]).join('').toLowerCase().includes('remote')).length;
+  const high      = scored.filter(j=>j.matchScore>=8).length;
+  const diceN     = scored.filter(j=>j.source==='Dice').length;
+  const indeedN   = scored.filter(j=>j.source==='Indeed').length;
+  const zipN      = scored.filter(j=>j.source==='ZipRecruiter').length;
+  const timeStr = fetchedAt
+    ? new Date(fetchedAt).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})
+    : '—';
+  const pill = document.getElementById('source-pill');
+  if (source === 'preloaded') {
+    pill.textContent = '📦 Task run: ' + timeStr; pill.className = 'source-pill pill-cached';
+  } else if (source === 'stale-fallback') {
+    pill.textContent = '⚠️ Stale task data — live fetch: ' + timeStr; pill.className = 'source-pill pill-stale';
+  } else {
+    pill.textContent = '🔴 Live: ' + timeStr; pill.className = 'source-pill pill-live';
+  }
+  const newBadge = newJobIds.size ? `<div class="stat-chip"><strong>${newJobIds.size}</strong> new this session</div>` : '';
+  const sourceChips = [
+    diceN   ? `<span class="badge b-dice">Dice</span> ${diceN}`               : '',
+    indeedN ? `<span class="badge b-indeed">Indeed</span> ${indeedN}`         : '',
+    zipN    ? `<span class="badge b-ziprecruiter">ZipRecruiter</span> ${zipN}` : '',
+  ].filter(Boolean).join('&nbsp; ');
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat-chip"><strong>${scored.length}</strong> matched roles</div>
+    <div class="stat-chip"><strong>${high}</strong> strong matches (8+)</div>
+    <div class="stat-chip"><strong>${remote}</strong> remote</div>
+    <div class="stat-chip">${sourceChips}</div>
+    ${newBadge}
+  `;
+  renderJobRows();
+  renderPipeline();
+  document.getElementById('key-status').innerHTML =
+    `<span style="color:#bbb;">Scheduled task searches Dice · Indeed · ZipRecruiter daily · Live refresh searches all three</span>`;
+  document.getElementById('disclaimer').textContent = [
+    scoringFailed ? 'AI scoring unavailable — scores estimated by keyword.' : '',
+    source === 'preloaded' ? 'Showing results from last scheduled task run. Reload to fetch live data.' : '',
+    source === 'stale-fallback' ? 'Task data was >24h old — fetched live instead.' : '',
+    'Defense/clearance roles included but ranked lower. Verify details before applying.',
+  ].filter(Boolean).join(' ');
+  document.getElementById('loading-area').style.display = 'none';
+  document.getElementById('matches-content').style.display = 'block';
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+async function run(forceSearch = false) {
+  cleanupEmptyApplyActivities();
+  migrateAppsToActivities();
+  initResumes();
+  refreshActBadge();
+  // Reset UI for a fresh run
+  document.getElementById('loading-area').style.display = 'flex';
+  document.getElementById('matches-content').style.display = 'none';
+  document.getElementById('btn-live-search').disabled = true;
+  document.getElementById('btn-live-search').textContent = '⏳ Searching…';
+  const cache     = getCache();
+  const dismissed = getDismissed();
+  const now       = Date.now();
+  const preloadedAge = PRELOADED_TIMESTAMP ? now - new Date(PRELOADED_TIMESTAMP).getTime() : Infinity;
+  const usePreloaded = !forceSearch && PRELOADED_JOBS.length > 0 && preloadedAge < 24 * 3600 * 1000;
+  let scored, scoringFailed = false, fetchedAt, source;
+  const cfg = getSettings();
+  if (usePreloaded) {
+    const preloadedAppliedKeys   = getAppliedJobKeys();
+    const preloadedDismissedKeys = getDismissedJobKeys();
+    scored    = PRELOADED_JOBS.filter(j => {
+      if (j.matchScore < 5) return false;
+      if (dismissed.has(j.guid)) return false;
+      if (isHybridOutsideLocalArea(j)) return false;
+      if (isNonSalaried(j)) return false;
+      if (!meetsWorkArrangement(j, cfg)) return false;
+      if (cfg.defensePreference === 'exclude' && isDefenseRole(j)) return false;
+      if (!meetsMinSalary(j, cfg.minSalary, cfg.hideNoSalary)) return false;
+      const key = normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title);
+      if (preloadedAppliedKeys.has(key)) return false;
+      if (preloadedDismissedKeys.has(key)) return false;
+      return true;
+    }).sort((a,b) => b.matchScore - a.matchScore);
+    fetchedAt = PRELOADED_TIMESTAMP;
+    source    = 'preloaded';
+    document.getElementById('loading-area').style.display = 'none';
+    document.getElementById('matches-content').style.display = 'block';
+  } else {
+    source = PRELOADED_JOBS.length > 0 ? 'stale-fallback' : 'live';
+    try {
+      const seen = new Set(); const allJobs = [];
+      const effDice=getEffectiveDiceSearches(), effIndeed=getEffectiveIndeedSearches(), effZR=getEffectiveZrSearches();
+      for (let i=0; i<effDice.length; i++) {
+        setStatus(`Dice: "${effDice[i]}" (${i+1}/${effDice.length})…`);
+        for (const j of await searchDice(effDice[i]))
+          if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
+      }
+      for (let i=0; i<effIndeed.length; i++) {
+        const s = effIndeed[i];
+        setStatus(`Indeed: "${s.q}" (${i+1}/${effIndeed.length})…`);
+        for (const j of await searchIndeed(s.q, s.loc))
+          if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
+      }
+      for (let i=0; i<effZR.length; i++) {
+        setStatus(`ZipRecruiter: "${effZR[i]}" (${i+1}/${effZR.length})…`);
+        for (const j of await searchZipRecruiter(effZR[i]))
+          if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
+      }
+      setStatus(`Scoring ${allJobs.length} roles…`);
+      const toScore = allJobs.slice(0, 60);
+      const aiScores = await scoreJobs(toScore);
+      scoringFailed = !aiScores;
+      const scoreMap = {};
+      if (aiScores) for (const s of aiScores) scoreMap[s.index-1] = s;
+      scored = toScore
+        .map((j,i) => ({
+          ...j,
+          matchScore:  scoreMap[i]?.score  ?? keywordScore(j, getSettings().scorePenaltyTerms || []),
+          matchReason: scoreMap[i]?.reason ?? (scoringFailed ? 'keyword match' : ''),
+        }))
+        .filter(j => {
+          if (j.matchScore < 5) return false;
+          if (dismissed.has(j.guid)) return false;
+          if (isHybridOutsideLocalArea(j)) return false;
+          if (isNonSalaried(j)) return false;
+          if (!meetsWorkArrangement(j, cfg)) return false;
+          if (cfg.defensePreference === 'exclude' && isDefenseRole(j)) return false;
+          if (!meetsMinSalary(j, cfg.minSalary, cfg.hideNoSalary)) return false;
+          const liveKey = normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title);
+          if (getAppliedJobKeys().has(liveKey)) return false;
+          if (getDismissedJobKeys().has(liveKey)) return false;
+          return true;
+        })
+        .sort((a,b) => b.matchScore - a.matchScore);
+      fetchedAt = new Date().toISOString();
+    } catch(err) {
+      document.getElementById('loading-area').style.display = 'none';
+      document.getElementById('matches-error').innerHTML =
+        `<div class="error-box"><strong>Error:</strong> ${esc(err.message)}</div>`;
+      document.getElementById('btn-live-search').disabled = false;
+      document.getElementById('btn-live-search').textContent = '🔍 Live Search';
+      return;
+    }
+  }
+  const newJobIds = new Set();
+  for (const j of scored) if (!cache[j.guid]) newJobIds.add(j.guid);
+  const updated = {...cache};
+  for (const j of scored) {
+    if (!updated[j.guid]) updated[j.guid] = {
+      guid: j.guid, title: j.title, companyName: j.companyName,
+      detailsPageUrl: j.detailsPageUrl, matchScore: j.matchScore,
+      source: j.source, firstSeen: now,
+    };
+  }
+  setCache(updated);
+  renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source);
+  document.getElementById('btn-live-search').disabled = false;
+  document.getElementById('btn-live-search').textContent = '🔍 Live Search';
+}
+
+
+// ─── Resume Library ──────────────────────────────────────────────────────────
+// Add your resume files here, or manage them through the Resumes tab in the dashboard.
+// Format: { id:'unique_id', file:'filename.docx', company:'Company', role:'Role Title',
+//           created:'YYYY-MM-DD', type:'base'|'tailored'|'cover', folder:'resumes/', archived:false }
+const INITIAL_RESUMES = [];
+function getResumes()  { try { return JSON.parse(localStorage.getItem(RESUME_KEY)); } catch { return null; } }
+function setResumes(r) { try { localStorage.setItem(RESUME_KEY, JSON.stringify(r)); } catch {} }
+function initResumes() {
+  const existing = getResumes();
+  if (!existing) { setResumes(INITIAL_RESUMES); return; }
+  const existingIds = new Set(existing.map(r => r.id));
+  const missing = INITIAL_RESUMES.filter(r => !existingIds.has(r.id));
+  if (missing.length) setResumes([...missing, ...existing]);
+}
+function toggleResumeForm() {
+  const f = document.getElementById('resume-add-form');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  if (f.style.display === 'block') document.getElementById('rf-date').value = new Date().toISOString().slice(0,10);
+}
+function toggleArchivedResumes() {
+  const s = document.getElementById('archived-r-section');
+  const b = document.getElementById('archived-r-toggle');
+  const hidden = s.style.display === 'none';
+  s.style.display = hidden ? '' : 'none';
+  b.textContent  = hidden ? 'Hide' : 'Show';
+}
+function saveNewResume() {
+  const file    = document.getElementById('rf-file').value.trim();
+  const type    = document.getElementById('rf-type').value;
+  const company = document.getElementById('rf-company').value.trim();
+  const role    = document.getElementById('rf-role').value.trim();
+  const date    = document.getElementById('rf-date').value;
+  const folder  = document.getElementById('rf-folder').value;
+  if (!file) { alert('File name is required.'); return; }
+  const resumes = getResumes() || [];
+  resumes.unshift({ id:'r_'+Date.now(), file, company, role,
+    created: date || new Date().toISOString().slice(0,10),
+    type, folder, archived: folder.includes('archived') });
+  setResumes(resumes); toggleResumeForm(); renderResumes();
+}
+function archiveResume(id) {
+  const resumes = getResumes() || [];
+  const r = resumes.find(x => x.id === id);
+  if (r) { r.archived = true; r.folder = 'resumes/archived/'; setResumes(resumes); renderResumes(); }
+}
+function restoreResume(id) {
+  const resumes = getResumes() || [];
+  const r = resumes.find(x => x.id === id);
+  if (r) { r.archived = false; r.folder = 'resumes/'; setResumes(resumes); renderResumes(); }
+}
+function deleteResume(id) {
+  if (!confirm('Remove from library? (File is not deleted from your computer.)')) return;
+  setResumes((getResumes()||[]).filter(x => x.id !== id)); renderResumes();
+}
+function renderResumes() {
+  const resumes  = getResumes() || [];
+  const active   = resumes.filter(r => !r.archived);
+  const archived = resumes.filter(r =>  r.archived);
+  document.getElementById('active-r-count').textContent   = active.length;
+  document.getElementById('archived-r-count').textContent = archived.length;
+  function typeLabel(t) {
+    if (t==='base')     return '<span class="r-badge r-base">Base</span>';
+    if (t==='tailored') return '<span class="r-badge r-tailored">Tailored</span>';
+    if (t==='cover')    return '<span class="r-badge r-cover">Cover Letter</span>';
+    return '<span class="r-badge">'+(t||'Other')+'</span>';
+  }
+  function rowHtml(r) {
+    const btns = r.type === 'base'
+      ? `<button class="btn-rdelete" onclick="deleteResume('${r.id}')">&#x2715;</button>`
+      : r.archived
+        ? `<button class="btn-rrestore" onclick="restoreResume('${r.id}')">Restore</button> <button class="btn-rdelete" onclick="deleteResume('${r.id}')">&#x2715;</button>`
+        : `<button class="btn-rarchive" onclick="archiveResume('${r.id}')">Archive</button> <button class="btn-rdelete" onclick="deleteResume('${r.id}')">&#x2715;</button>`;
+    return `<tr><td class="r-file">${r.file||''}</td><td>${r.company||'—'}</td>`+
+           `<td style="color:#475569;font-size:13px;">${r.role||'—'}</td>`+
+           `<td style="color:#94a3b8;font-size:12px;">${(r.created||'').slice(0,10)}</td>`+
+           `<td>${typeLabel(r.type)}</td><td style="white-space:nowrap">${btns}</td></tr>`;
+  }
+  const empty = '<tr><td colspan="6" style="color:#94a3b8;text-align:center;padding:16px;">None</td></tr>';
+  document.getElementById('active-r-rows').innerHTML   = active.length   ? active.map(rowHtml).join('')   : empty;
+  document.getElementById('archived-r-rows').innerHTML = archived.length ? archived.map(rowHtml).join('') : empty;
+}
+
+// ─── Settings helpers ────────────────────────────────────────────────────────
+async function autoFillMetroCities() {
+  const location = document.getElementById('st-location').value.trim();
+  const commute  = parseInt(document.getElementById('st-commute').value) || 25;
+  const status   = document.getElementById('autofill-status');
+  if (!location) { status.textContent = 'Enter your location in Profile first.'; status.style.color='#dc2626'; return; }
+  const btn = document.getElementById('btn-autofill-metro');
+  btn.textContent = 'Filling…'; btn.disabled = true;
+  status.textContent = ''; status.style.color = '#94a3b8';
+  try {
+    const raw = await window.cowork.askClaude(
+      `Cities within ${commute} miles of ${location}. Comma-separated list, all lowercase, no other text.`,
+      []
+    );
+    const text = typeof raw === 'string' ? raw : (raw?.text || raw?.content || JSON.stringify(raw));
+    const cities = String(text).toLowerCase().replace(/[^a-z ,]/g,'').split(',').map(c=>c.trim()).filter(Boolean);
+    if (cities.length) {
+      document.getElementById('st-metro').value = cities.join(', ');
+      status.textContent = `✓ ${cities.length} cities added`;
+      status.style.color = '#16a34a';
+    } else {
+      status.textContent = 'Could not parse result — enter cities manually.';
+      status.style.color = '#dc2626';
+    }
+  } catch(e) {
+    status.textContent = 'Failed: ' + (e.message||e);
+    status.style.color = '#dc2626';
+  }
+  btn.textContent = '🗺 Auto-fill from location & commute range'; btn.disabled = false;
+}
+
+// ─── Settings form ──────────────────────────────────────────────────────────
+// ─── Backup key list ──────────────────────────────────────────────────────────
+const BACKUP_KEYS = ['jd_settings','jd_activities','jd_dismissed','jd_resumes','jd_job_cache'];
+
+let _autoBackupTimer = null;
+
+function exportData(silent = false) {
+  const payload = { exportedAt: new Date().toISOString(), version: '1', data: {} };
+  for (const key of BACKUP_KEYS) {
+    const val = localStorage.getItem(key);
+    if (val) payload.data[key] = val;
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const date = new Date().toISOString().slice(0, 10);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `job-scout-backup-${date}.json`; a.click();
+  URL.revokeObjectURL(url);
+  if (!silent) {
+    const msg = document.getElementById('backup-msg');
+    if (msg) { msg.textContent = '✓ Backup downloaded'; msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 3000); }
+  }
+}
+
+function importData(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (!payload.data) throw new Error('Invalid backup file');
+      for (const [key, val] of Object.entries(payload.data)) {
+        if (BACKUP_KEYS.includes(key)) localStorage.setItem(key, val);
+      }
+      const msg = document.getElementById('backup-msg');
+      if (msg) { msg.textContent = '✓ Backup restored — reloading…'; msg.style.display = 'inline'; }
+      setTimeout(() => location.reload(), 1200);
+    } catch(err) {
+      alert('Could not read backup file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function initAutoBackup() {
+  if (_autoBackupTimer) { clearInterval(_autoBackupTimer); _autoBackupTimer = null; }
+  const hours = getSettings().autoBackupIntervalHours || 0;
+  if (hours > 0) {
+    _autoBackupTimer = setInterval(() => exportData(true), hours * 60 * 60 * 1000);
+  }
+}
+
+function loadSettingsForm() {
+  const s = getSettings();
+  document.getElementById('st-name').value      = s.candidateName || '';
+  document.getElementById('st-location').value  = s.location      || '';
+  document.getElementById('st-profile').value   = s.profile       || PROFILE;
+  document.getElementById('st-minsalary').value = s.minSalary > 0 ? s.minSalary : '';
+  document.getElementById('st-hide-no-salary').checked = !!s.hideNoSalary;
+  const arr = s.workArrangements || ['remote'];
+  document.querySelectorAll('input[name="st-arrange"]').forEach(cb => cb.checked = arr.includes(cb.value));
+  document.getElementById('st-commute').value = s.commuteRangeMiles > 0 ? s.commuteRangeMiles : '';
+  document.querySelectorAll('input[name="st-defense"]').forEach(r => r.checked = r.value === (s.defensePreference || 'penalize'));
+  document.getElementById('st-week-goal').value = s.weeklyActivityGoal || 5;
+  document.getElementById('st-auto-backup').value = s.autoBackupIntervalHours || 0;
+  document.getElementById('st-penalty-terms').value = (s.scorePenaltyTerms || []).join(', ');
+  // Common search terms — derive default from DICE_SEARCHES by stripping " remote" suffix
+  const defaultTerms = [...new Set(DICE_SEARCHES.map(t=>t.replace(/ remote$/i,'').trim()))].join('\n');
+  document.getElementById('st-terms').value  = s.searchTerms        ? s.searchTerms.join('\n')                    : defaultTerms;
+  // Per-service overrides — blank means "use common terms above"
+  document.getElementById('st-dice').value   = s.diceSearchTerms   ? s.diceSearchTerms.join('\n')               : '';
+  document.getElementById('st-indeed').value = s.indeedSearchTerms ? s.indeedSearchTerms.join('\n')             : '';
+  document.getElementById('st-zr').value     = s.zrSearchTerms     ? s.zrSearchTerms.join('\n')                 : '';
+  const defaultMetro = LOCAL_AREA_RE.source.replace(/^\\b\(|\)\\b\/i$/g,'').split('|').filter(c=>c!=='remote').join(', ');
+  document.getElementById('st-metro').value  = s.localMetroCities  ? s.localMetroCities.join(', ')               : defaultMetro;
+}
+function saveSettingsForm() {
+  const arrangements = [...document.querySelectorAll('input[name="st-arrange"]:checked')].map(cb => cb.value);
+  const defenseVal   = document.querySelector('input[name="st-defense"]:checked')?.value || 'penalize';
+  const commonTerms = document.getElementById('st-terms').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const diceLines   = document.getElementById('st-dice').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const indeedLines = document.getElementById('st-indeed').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const zrLines     = document.getElementById('st-zr').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const metro       = document.getElementById('st-metro').value.split(',').map(c=>c.trim().toLowerCase()).filter(Boolean);
+  const minSal      = parseInt(document.getElementById('st-minsalary').value) || 0;
+  setSettings({
+    candidateName: document.getElementById('st-name').value.trim(),
+    location:      document.getElementById('st-location').value.trim(),
+    profile:       document.getElementById('st-profile').value.trim(),
+    workArrangements:  arrangements.length ? arrangements : ['remote'],
+    commuteRangeMiles: parseInt(document.getElementById('st-commute').value) || 0,
+    minSalary:         minSal,
+    hideNoSalary:      document.getElementById('st-hide-no-salary').checked,
+    defensePreference: defenseVal,
+    weeklyActivityGoal: parseInt(document.getElementById('st-week-goal').value) || 5,
+    autoBackupIntervalHours: parseInt(document.getElementById('st-auto-backup').value) || 0,
+    searchTerms:       commonTerms.length  ? commonTerms : null,
+    diceSearchTerms:   diceLines.length   ? diceLines   : null,
+    indeedSearchTerms: indeedLines.length ? indeedLines : null,
+    zrSearchTerms:     zrLines.length     ? zrLines     : null,
+    localMetroCities:  metro.length       ? metro       : null,
+    scorePenaltyTerms: document.getElementById('st-penalty-terms').value
+      .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+  });
+  const msg = document.getElementById('settings-saved-msg');
+  msg.style.display = 'inline';
+  setTimeout(() => msg.style.display = 'none', 2500);
+  initAutoBackup();
+}
+function showResetConfirm() {
+  document.getElementById('btn-reset-init').style.display = 'none';
+  document.getElementById('reset-confirm-row').style.display = 'flex';
+}
+function hideResetConfirm() {
+  document.getElementById('reset-confirm-row').style.display = 'none';
+  document.getElementById('btn-reset-init').style.display = '';
+}
+function resetSettings() {
+  localStorage.removeItem(SETTINGS_KEY);
+  hideResetConfirm();
+  loadSettingsForm();
+  const msg = document.getElementById('settings-saved-msg');
+  msg.textContent = '&#x2713; Reset!';
+  msg.style.display = 'inline';
+  setTimeout(() => { msg.style.display='none'; msg.textContent='&#x2713; Saved!'; }, 2000);
+}
+
+// run() is called here (end of script) so that const INITIAL_RESUMES is
+// fully defined before run() → initResumes() tries to reference it.
+updateActFormFields();
+run();
+initAutoBackup();
+</script>
+</body>
+</html>

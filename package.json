@@ -1,0 +1,24 @@
+{
+  "name": "job-scout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A standalone, self-hosting job-search dashboard: searches job boards daily, reads job-alert emails from your own inbox, scores each match 1-10 (free on a local GPU or via Claude Haiku), and keeps an unemployment-grade activity log. Re-platformed out of Claude Cowork from Adli Waziri's cowork-job-scout.",
+  "type": "commonjs",
+  "bin": {
+    "job-scout": "bin/job-scout.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "serve": "node bin/job-scout.js serve",
+    "daily": "node bin/job-scout.js daily"
+  },
+  "dependencies": {},
+  "license": "MIT",
+  "author": "Drew Douglass",
+  "contributors": [
+    "Adli Waziri (original cowork-job-scout)"
+  ]
+}
