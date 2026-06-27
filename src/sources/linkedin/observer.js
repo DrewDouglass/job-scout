@@ -191,4 +191,4 @@ After that, capture runs headless against this profile. Re-run this 'login' comm
 
 if (require.main === module) runCli(process.argv).catch(e => { log('fatal:', e.stack || e.message); process.exit(1); });
 
-module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };
+module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, runCli, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };
