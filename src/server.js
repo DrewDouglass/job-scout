@@ -29,16 +29,76 @@ function readBody(req) {
   });
 }
 
-/** Inject the current display-filtered jobs into Adli's PRELOADED_JOBS slot. */
+/** Build the dashboard's seed state from SQLite (mirrors the jd_* localStorage keys). */
+function buildSeedState(db) {
+  return {
+    jd_settings: db.getSettings(),
+    jd_activities: db.getActs(),
+    jd_dismissed: db.getDismissedMap(),
+    jd_resumes: db.getResumes(),
+    jd_job_cache: db.getJobsCacheMap(),
+    jd_applications: {}, // legacy/derived (markApplied writes an activity, which IS persisted)
+  };
+}
+
+/**
+ * The localStorage shim, injected BEFORE Adli's script runs (the dashboard boots by calling run()
+ * at the end of its main script). It overrides Storage.prototype's get/set/removeItem for the six
+ * jd_* keys: reads come from the SQLite-seeded snapshot, writes mirror to the JSON API so the data
+ * lives in SQLite — not the browser. Adli's ~12 storage helpers are untouched and keep working.
+ */
+function lsShimScript(seed) {
+  return `
+window.__JOBSCOUT_STATE__ = ${JSON.stringify(seed)};
+(function(){
+  var seed = window.__JOBSCOUT_STATE__ || {};
+  var mem = {}; for (var k in seed) mem[k] = JSON.stringify(seed[k]);
+  var KEYS = { jd_settings:1, jd_job_cache:1, jd_applications:1, jd_dismissed:1, jd_activities:1, jd_resumes:1 };
+  var EP = { jd_settings:['/api/settings', function(p){return p;}],
+             jd_activities:['/api/activities/replace', function(p){return {acts:p};}],
+             jd_dismissed:['/api/dismissed/replace', function(p){return {map:p};}],
+             jd_resumes:['/api/resumes/replace', function(p){return {resumes:p};}] };
+  function post(key, val){
+    var ep = EP[key]; if(!ep) return; // jd_job_cache + jd_applications stay client-only (derived/legacy)
+    var p; try { p = JSON.parse(val); } catch(e){ return; }
+    fetch(ep[0], {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(ep[1](p))}).catch(function(){});
+  }
+  var SP = window.Storage && window.Storage.prototype; if(!SP) return;
+  var g = SP.getItem, s = SP.setItem, r = SP.removeItem;
+  SP.getItem = function(key){ if(this===window.localStorage && KEYS[key]) return (key in mem)?mem[key]:null; return g.call(this,key); };
+  SP.setItem = function(key,val){ if(this===window.localStorage && KEYS[key]){ mem[key]=String(val); post(key,String(val)); return; } return s.call(this,key,val); };
+  SP.removeItem = function(key){ if(this===window.localStorage && KEYS[key]){ delete mem[key]; if(key==='jd_settings') fetch('/api/settings/reset',{method:'POST'}).catch(function(){}); return; } return r.call(this,key); };
+})();`;
+}
+
+/** Repoint Live Search → server refresh, and neutralize the Cowork-only metro autofill. Runs AFTER Adli's script. */
+const TRAILER_SCRIPT = `<script>
+window.refreshNow = async function(){
+  var b = document.getElementById('btn-live-search');
+  if(b){ b.disabled=true; b.textContent='\\u23F3 Refreshing\\u2026'; }
+  try { await fetch('/api/refresh', {method:'POST'}); } catch(e){}
+  location.reload();
+};
+(function(){ var b=document.getElementById('btn-live-search'); if(b) b.setAttribute('onclick','refreshNow()'); })();
+window.autoFillMetroCities = function(){
+  var s=document.getElementById('autofill-status');
+  if(s){ s.textContent='Enter your metro cities manually here (auto-fill needs an AI provider).'; s.style.color='#dc2626'; }
+};
+</script>`;
+
+/** Serve Adli's dashboard with: scored jobs injected, the SQLite-backed localStorage shim, and the trailer. */
 function renderDashboard(db) {
   let html = fs.readFileSync(path.join(PUBLIC_DIR, 'dashboard.html'), 'utf8');
   const settings = db.getSettings();
   const jobs = applyDisplayFilters(db.getActiveJobs(), settings, displayContext(db));
+  const seed = buildSeedState(db);
   const block = `<script>// PRELOADED_JOBS_START
 const PRELOADED_JOBS = ${JSON.stringify(jobs)};
 const PRELOADED_TIMESTAMP = ${JSON.stringify(new Date().toISOString())};
+${lsShimScript(seed)}
 // PRELOADED_JOBS_END`;
   html = html.replace(/<script>\/\/ PRELOADED_JOBS_START[\s\S]*?\/\/ PRELOADED_JOBS_END/, block);
+  html = html.replace('</body>', `${TRAILER_SCRIPT}\n</body>`);
   return html;
 }
 
@@ -68,18 +128,28 @@ function createServer(db) {
       if (p === '/api/settings' && req.method === 'GET') return sendJson(res, 200, db.getSettings());
       if (p === '/api/settings' && req.method === 'POST') { db.setSettings(await readBody(req)); return sendJson(res, 200, db.getSettings()); }
 
+      if (p === '/api/settings/reset' && req.method === 'POST') { db.resetSettings(); return sendJson(res, 200, db.getSettings()); }
+
       if (p === '/api/activities' && req.method === 'GET') return sendJson(res, 200, db.getActs());
       if (p === '/api/activities' && req.method === 'POST') { const a = await readBody(req); db.putActivity(a); return sendJson(res, 200, { ok: true, id: a.id }); }
       if (p === '/api/activities/delete' && req.method === 'POST') { const { id } = await readBody(req); db.deleteActivity(id); return sendJson(res, 200, { ok: true }); }
+      if (p === '/api/activities/replace' && req.method === 'POST') { const { acts } = await readBody(req); db.replaceActivities(acts || {}); return sendJson(res, 200, { ok: true }); }
 
       if (p === '/api/dismiss' && req.method === 'POST') { const { guid, reason, job } = await readBody(req); db.dismissJob(guid, reason || '', { job }); return sendJson(res, 200, { ok: true }); }
       if (p === '/api/undismiss' && req.method === 'POST') { const { guid } = await readBody(req); db.undismissJob(guid); return sendJson(res, 200, { ok: true }); }
+      if (p === '/api/dismissed/replace' && req.method === 'POST') { const { map } = await readBody(req); db.replaceDismissed(map || {}); return sendJson(res, 200, { ok: true }); }
 
       if (p === '/api/resumes' && req.method === 'GET') return sendJson(res, 200, db.getResumes());
       if (p === '/api/resumes' && req.method === 'POST') { const r = await readBody(req); db.putResume(r); return sendJson(res, 200, { ok: true }); }
       if (p === '/api/resumes/delete' && req.method === 'POST') { const { id } = await readBody(req); db.deleteResume(id); return sendJson(res, 200, { ok: true }); }
+      if (p === '/api/resumes/replace' && req.method === 'POST') { const { resumes } = await readBody(req); db.replaceResumes(resumes || []); return sendJson(res, 200, { ok: true }); }
 
       if (p === '/api/status' && req.method === 'GET') { const run = db.lastRun(); return sendJson(res, 200, { run }); }
+      if (p === '/api/refresh' && req.method === 'POST') {
+        const { runDaily } = require('./pipeline');
+        try { const r = await runDaily(db, db.getSettings(), {}); return sendJson(res, 200, { ok: true, ...r }); }
+        catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
+      }
 
       // static assets (docs images, etc.)
       if (req.method === 'GET' && p.startsWith('/docs/')) {

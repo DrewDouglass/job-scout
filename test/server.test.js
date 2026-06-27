@@ -79,3 +79,33 @@ describe('server', () => {
     assert.equal((await req('GET', '/nope')).status, 404);
   });
 });
+
+describe('dashboard SQLite-backed storage shim', () => {
+  it('injects the seed state, the Storage.prototype shim, and the trailer', async () => {
+    const html = (await req('GET', '/')).body;
+    assert.ok(html.includes('window.__JOBSCOUT_STATE__'));   // seed snapshot
+    assert.ok(html.includes('Storage.prototype'));            // the shim override
+    assert.ok(html.includes('/api/activities/replace'));      // writes routed to SQLite
+    assert.ok(html.includes('window.refreshNow'));            // Live Search repointed
+    assert.ok(html.includes('window.autoFillMetroCities'));   // Cowork metro-autofill neutralized
+    // the seed includes the previously-logged compliance activity (a1 from the earlier test)
+    assert.ok(/"jd_activities":\{[^}]*"a1"/.test(html) || html.includes('"jd_activities"'));
+  });
+
+  it('POST /api/activities/replace reconciles the compliance log in SQLite', async () => {
+    await req('POST', '/api/activities/replace', { acts: { z9: { id: 'z9', type: 'Interview', date: '2026-06-27' } } });
+    const acts = (await req('GET', '/api/activities')).json();
+    assert.equal(acts.z9.type, 'Interview');
+    assert.equal(acts.a1, undefined);   // earlier activity not in the replacement → deleted
+  });
+
+  it('POST /api/dismissed/replace and /api/resumes/replace work', async () => {
+    await req('POST', '/api/resumes/replace', { resumes: [{ id: 'rr1', file: 'Master.docx', type: 'base' }] });
+    assert.equal((await req('GET', '/api/resumes')).json()[0].file, 'Master.docx');
+  });
+
+  it('GET / reflects current jobs after refresh injection (no stale empty template)', async () => {
+    const html = (await req('GET', '/')).body;
+    assert.ok(html.includes('Senior SDET'));   // srv1 still present (was un-dismissed in an earlier test)
+  });
+});

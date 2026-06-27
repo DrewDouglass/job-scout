@@ -107,6 +107,37 @@ describe('runs', () => {
   });
 });
 
+describe('replace endpoints (dashboard sync)', () => {
+  it('replaceActivities upserts present and deletes absent (compliance log reconcile)', () => {
+    db.putActivity({ id: 'a', type: 'Job Application', date: '2026-06-01', createdAt: 1 });
+    db.putActivity({ id: 'b', type: 'Networking', date: '2026-06-02', createdAt: 2 });
+    // new full map: keep+edit a, drop b, add c
+    db.replaceActivities({
+      a: { id: 'a', type: 'Job Application', date: '2026-06-01', employer: 'Edited', createdAt: 1 },
+      c: { id: 'c', type: 'Interview', date: '2026-06-03', createdAt: 3 },
+    });
+    const acts = db.getActs();
+    assert.deepEqual(Object.keys(acts).sort(), ['a', 'c']);
+    assert.equal(acts.a.employer, 'Edited');    // upsert applied
+    assert.equal(acts.b, undefined);            // absent → deleted
+  });
+
+  it('replaceDismissed dismisses present and restores absent', () => {
+    db.upsertJob({ guid: 'd1', title: 'X', companyName: 'Y' });
+    db.replaceDismissed({ d1: { reason: 'spam', companyName: 'Y', title: 'X' } });
+    assert.equal(db.getActiveJobs().length, 0);
+    db.replaceDismissed({}); // empty → undismiss everything
+    assert.equal(db.getActiveJobs().length, 1);
+  });
+
+  it('replaceResumes upserts present and deletes absent', () => {
+    db.putResume({ id: 'r1', file: 'a.docx', type: 'base' });
+    db.putResume({ id: 'r2', file: 'b.docx', type: 'tailored' });
+    db.replaceResumes([{ id: 'r1', file: 'a.docx', type: 'base' }, { id: 'r3', file: 'c.docx', type: 'cover' }]);
+    assert.deepEqual(db.getResumes().map(r => r.id).sort(), ['r1', 'r3']);
+  });
+});
+
 describe('migrate from Adli backup', () => {
   const backup = {
     exportedAt: '2026-06-27T00:00:00Z', version: '1',

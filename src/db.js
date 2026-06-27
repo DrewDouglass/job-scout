@@ -288,6 +288,54 @@ class JobScoutDB {
   }
   deleteActivity(id) { this.db.prepare('DELETE FROM activities WHERE id=?').run(id); }
 
+  /**
+   * Replace the WHOLE activity log with `actsMap` (id -> activity): upsert all present, delete any absent.
+   * This is the crown-jewel compliance log, so it runs in one transaction and is the endpoint the dashboard
+   * posts to on every change (mirrors Adli's setActs(wholeMap) semantics, but durable in SQLite).
+   */
+  replaceActivities(actsMap) {
+    this.db.prepare('BEGIN').run();
+    try {
+      const keep = new Set(Object.keys(actsMap || {}));
+      for (const [id, a] of Object.entries(actsMap || {})) this.putActivity({ ...a, id: a.id || id });
+      for (const r of this.db.prepare('SELECT id FROM activities').all()) if (!keep.has(r.id)) this.db.prepare('DELETE FROM activities WHERE id=?').run(r.id);
+      this.db.prepare('COMMIT').run();
+    } catch (e) { this.db.prepare('ROLLBACK').run(); throw e; }
+  }
+
+  /** Replace the dismissed set with `map` (guid -> {reason,dismissedAt,companyName,title}): dismiss present, undismiss absent. */
+  replaceDismissed(map) {
+    this.db.prepare('BEGIN').run();
+    try {
+      const keep = new Set(Object.keys(map || {}));
+      for (const [guid, d] of Object.entries(map || {})) {
+        this.dismissJob(guid, (d && d.reason) || '', { job: { guid, companyName: (d && d.companyName) || '', title: (d && d.title) || '' }, now: (d && d.dismissedAt) || Date.now() });
+      }
+      for (const guid of Object.keys(this.getDismissedMap())) if (!keep.has(guid)) this.undismissJob(guid);
+      this.db.prepare('COMMIT').run();
+    } catch (e) { this.db.prepare('ROLLBACK').run(); throw e; }
+  }
+
+  /** Replace the resume library with `arr`: upsert all, delete any absent. */
+  replaceResumes(arr) {
+    this.db.prepare('BEGIN').run();
+    try {
+      const keep = new Set((arr || []).map(r => r && r.id).filter(Boolean));
+      for (const r of (arr || [])) if (r && r.id) this.putResume(r);
+      for (const row of this.db.prepare('SELECT id FROM resumes').all()) if (!keep.has(row.id)) this.db.prepare('DELETE FROM resumes WHERE id=?').run(row.id);
+      this.db.prepare('COMMIT').run();
+    } catch (e) { this.db.prepare('ROLLBACK').run(); throw e; }
+  }
+
+  resetSettings() { this.db.prepare('DELETE FROM settings').run(); }
+
+  /** guid -> job (Adli's shape), for seeding the dashboard's jd_job_cache. */
+  getJobsCacheMap() {
+    const map = {};
+    for (const j of this.getActiveJobs()) map[j.guid] = j;
+    return map;
+  }
+
   // ─── resumes ─────────────────────────────────────────────────────────────────
   getResumes() {
     return this.db.prepare('SELECT * FROM resumes').all().map(r => ({
