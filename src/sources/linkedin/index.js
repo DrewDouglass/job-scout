@@ -14,6 +14,19 @@ const { searchLinkedInGuest } = require('./guest');
 const DEAD_CANARY = () => evaluateCanary({ sessionAlive: false, httpStatuses: [], matchedResponses: 0, parsedJobCount: 0 });
 
 /**
+ * The URLs the ride-along navigates. Power users can set explicit `settings.linkedinSearchUrls`
+ * (e.g. a saved search with filters); otherwise we build them from the search terms + location the
+ * user already configured, so the ride-along works with zero extra setup.
+ */
+function deriveSearchUrls(settings) {
+  const explicit = settings.linkedinSearchUrls || [];
+  if (explicit.length) return explicit;
+  const terms = (settings.searchTerms && settings.searchTerms.length) ? settings.searchTerms : ['software engineer'];
+  const loc = (settings.location || 'United States').trim();
+  return terms.map(t => `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(t)}&location=${encodeURIComponent(loc)}`);
+}
+
+/**
  * Canary for the no-login guest feed. Returns null when healthy (the contract: null = nothing to
  * surface) and a loud degraded status when the feed is reachable-but-unreadable (LinkedIn changed
  * its markup) or unreachable — so the guest path is never silently empty either.
@@ -41,7 +54,7 @@ function guestCanary(g) {
  */
 async function searchLinkedIn(settings, opts = {}) {
   const sources = settings.sources || {};
-  const urls = settings.linkedinSearchUrls || [];
+  const urls = deriveSearchUrls(settings);
   const guestImpl = opts.guestImpl || searchLinkedInGuest;
   const guestEnabled = sources.linkedinGuest !== false;
 
@@ -75,4 +88,4 @@ async function searchLinkedIn(settings, opts = {}) {
   return { jobs: g.jobs, canary: guestEnabled ? guestCanary(g) : null, source: guestEnabled ? 'guest' : 'none', error: g.error };
 }
 
-module.exports = { searchLinkedIn };
+module.exports = { searchLinkedIn, deriveSearchUrls };

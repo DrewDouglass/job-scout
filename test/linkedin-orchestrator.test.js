@@ -4,7 +4,7 @@
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { searchLinkedIn } = require('../src/sources/linkedin');
+const { searchLinkedIn, deriveSearchUrls } = require('../src/sources/linkedin');
 
 // A captured Voyager response carrying one JobPosting.
 const voyagerCapture = {
@@ -17,6 +17,19 @@ const voyagerCapture = {
 const guestJob = { guid: 'linkedin_777', title: 'QA Lead', companyName: 'Beta', jobLocation: { displayName: 'Denver' }, source: 'LinkedIn' };
 
 const baseSettings = (over) => ({ sources: { linkedinRideAlong: true, linkedinGuest: true }, linkedinSearchUrls: ['https://x/jobs/search'], ...over });
+
+describe('deriveSearchUrls — ride-along works with zero extra setup', () => {
+  it('builds jobs-search URLs from the user\'s search terms + location', () => {
+    const urls = deriveSearchUrls({ searchTerms: ['engineering manager', 'director'], location: 'Denver, CO' });
+    assert.equal(urls.length, 2);
+    assert.match(urls[0], /keywords=engineering%20manager/);
+    assert.match(urls[0], /location=Denver%2C%20CO/);
+  });
+  it('honors explicit linkedinSearchUrls when set (power users / saved searches)', () => {
+    const urls = deriveSearchUrls({ linkedinSearchUrls: ['https://www.linkedin.com/jobs/search/?savedSearchId=1'], searchTerms: ['x'] });
+    assert.deepEqual(urls, ['https://www.linkedin.com/jobs/search/?savedSearchId=1']);
+  });
+});
 
 describe('searchLinkedIn orchestration', () => {
   it('uses the ride-along when healthy', async () => {
