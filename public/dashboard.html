@@ -400,10 +400,19 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
   <div class="tab" onclick="switchTab('activities')" data-tab="activities" id="act-tab-label">Job Search Log</div>
   <div class="tab" onclick="switchTab('resumes')" data-tab="resumes">Resumes</div>
   <div class="tab" onclick="switchTab('settings')" data-tab="settings">⚙ Settings</div>
+  <div class="tab" onclick="switchTab('setup')" data-tab="setup">ℹ️ Setup &amp; Help</div>
 </div>
 
 <!-- Matches panel -->
 <div id="tab-matches" class="tab-panel active">
+  <div id="setup-banner" style="display:none;background:#eef6ff;border:1px solid #bcdcff;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#1A3A5C;align-items:center;justify-content:space-between;gap:12px;">
+    <span>👋 New here? Open <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;font-weight:700;text-decoration:underline;cursor:pointer;">Setup &amp; Help</a> to connect your job sources and get started. Your data stays on your computer.</span>
+    <button onclick="dismissSetupBanner()" title="Dismiss" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:18px;line-height:1;">&times;</button>
+  </div>
+  <script>
+  function dismissSetupBanner(){ try{ localStorage.setItem('jd_setup_dismissed','1'); }catch(e){} var b=document.getElementById('setup-banner'); if(b) b.style.display='none'; }
+  (function(){ try{ if(localStorage.getItem('jd_setup_dismissed')!=='1'){ var b=document.getElementById('setup-banner'); if(b) b.style.display='flex'; } }catch(e){} })();
+  </script>
   <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
     <button id="btn-live-search" onclick="run(true)" style="font-size:12px;padding:5px 14px;background:white;border:1px solid #94a3b8;border-radius:6px;color:#475569;cursor:pointer;">🔍 Live Search</button>
   </div>
@@ -618,6 +627,37 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </div>
     </div>
     <div class="settings-section">
+      <h3>Job Sources</h3>
+      <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Turn sources on or off. New here? See the <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;font-weight:600;">ℹ️ Setup &amp; Help</a> tab.</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="st-src-jsearch"> <span><strong>JSearch</strong> &mdash; Indeed, ZipRecruiter, Glassdoor &amp; more <span style="color:#94a3b8;">(on by default)</span></span>
+      </label>
+      <div class="settings-field" style="margin:0 0 14px 26px;">
+        <label>JSearch API key <span style="font-weight:400;color:#94a3b8">&mdash; free, 200 searches/month, no credit card</span></label>
+        <input id="st-rapidapi-key" class="form-input" placeholder="paste your x-rapidapi-key here" autocomplete="off" style="width:100%;box-sizing:border-box;">
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one: free account at <strong>rapidapi.com</strong> &rarr; open the <strong>JSearch</strong> API &rarr; Subscribe to the free <strong>Basic</strong> plan &rarr; copy the key. Full steps in <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>. No key? Turn JSearch off and use LinkedIn only.</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="st-src-li-guest"> <span><strong>LinkedIn (public)</strong> &mdash; public listings, no login needed</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="st-src-li-ride"> <span><strong>LinkedIn (your account)</strong> &mdash; richer listings from your own session</span>
+      </label>
+      <div style="font-size:11px;color:#64748b;margin:4px 0 0 26px;">Run <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">job-scout linkedin login</code> once before turning this on.</div>
+    </div>
+    <div class="settings-section">
+      <h3>AI Scoring</h3>
+      <div class="settings-field">
+        <label>Scoring method</label>
+        <select id="st-score-provider" style="font-size:13px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;">
+          <option value="keyword">Keyword &mdash; free, no setup (default)</option>
+          <option value="haiku">Claude Haiku &mdash; needs your Anthropic API key</option>
+          <option value="ollama">Ollama &mdash; your own local AI</option>
+        </select>
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">Keyword works for everyone with no key. Haiku/Ollama give smarter scoring &mdash; see <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>.</div>
+      </div>
+    </div>
+    <div class="settings-section">
       <h3>Job Preferences</h3>
       <div class="settings-row">
         <div class="settings-field"><label>Work Arrangement <span style="font-weight:400;color:#94a3b8">(check all you'll consider)</span></label>
@@ -670,7 +710,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       <h3>Search Terms</h3>
       <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Job titles and keywords to search across all job boards (one per line). The dashboard handles service-specific formatting automatically.</div>
       <div class="settings-field">
-        <label>Search Terms <span style="font-weight:400;color:#94a3b8">(applied to Dice, Indeed, and ZipRecruiter)</span></label>
+        <label>Search Terms <span style="font-weight:400;color:#94a3b8">(applied to all your job sources)</span></label>
         <textarea id="st-terms" rows="6" placeholder="senior QA engineer&#10;SDET&#10;test automation engineer&#10;quality engineer python"></textarea>
       </div>
       <details style="margin-top:10px;">
@@ -688,7 +728,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div class="settings-section" style="background:#f8fafc;">
       <h3>Data Backup</h3>
       <div style="font-size:13px;color:#64748b;margin-bottom:12px;">
-        All dashboard data is stored in browser storage. Export a backup regularly so you don&#x2019;t lose your activity log, settings, or resume library if storage is cleared.
+        All your data is stored on your computer in a local database file (<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">~/.job-scout/job-scout.db</code>). Export a backup any time to keep a copy of your activity log, settings, and resume library.
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
         <button onclick="exportData()" style="font-size:13px;padding:7px 16px;background:#1A3A5C;border:none;border-radius:6px;color:white;cursor:pointer;">&#x2193; Export Backup</button>
@@ -723,6 +763,93 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div style="display:flex;align-items:center;padding:16px 0 8px;">
       <button class="btn-save-settings" onclick="saveSettingsForm()">Save Settings</button>
       <span class="settings-saved-msg" id="settings-saved-msg">&#x2713; Saved!</span>
+    </div>
+  </div>
+</div>
+
+<!-- Setup & Help panel -->
+<div id="tab-setup" class="tab-panel">
+  <div class="settings-wrap">
+    <div class="settings-section" style="background:#f8fafc;">
+      <h3>What this is</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.6;">
+        A private job-search dashboard that runs on <strong>your own computer</strong>. It searches job boards and LinkedIn for roles that fit you, scores each one 1&ndash;10, and keeps a job-search activity log you can use when filing for unemployment.
+        <strong>Nothing is uploaded anywhere</strong> &mdash; all your data stays in a single file on your machine.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>1. Start it</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        You need <strong>Node 24 or newer</strong> installed (one-time). Then, in a terminal:
+        <div style="background:#0f172a;color:#e2e8f0;border-radius:6px;padding:10px 12px;margin:8px 0;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">job-scout serve</div>
+        It will print a link &mdash; open it in your browser (usually <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">http://127.0.0.1:7777</code>). That's the only command you run day to day. (Once the scheduler is set up, it refreshes on its own.)
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>2. Set up your profile</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        Go to the <a href="#" onclick="switchTab('settings');return false;" style="color:#1A3A5C;font-weight:600;">⚙ Settings</a> tab and fill in your name, location, a short skills summary, work arrangement (remote/hybrid/on-site), salary floor, and the job titles you're searching for. Click <strong>Save Settings</strong>.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>3. Turn on your job sources</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        In <a href="#" onclick="switchTab('settings');return false;" style="color:#1A3A5C;font-weight:600;">⚙ Settings &rarr; Job Sources</a>:
+        <ul style="margin:8px 0 0 0;padding-left:20px;">
+          <li style="margin-bottom:10px;"><strong>JSearch</strong> (on by default) pulls Indeed, ZipRecruiter, Glassdoor, and more. It needs a <strong>free</strong> key:
+            <ol style="margin:6px 0 0 0;padding-left:18px;color:#475569;">
+              <li>Make a free account at <strong>rapidapi.com</strong></li>
+              <li>Open the <strong>JSearch</strong> API page (search &ldquo;JSearch&rdquo;)</li>
+              <li>Click <strong>Subscribe</strong> &rarr; pick the free <strong>Basic</strong> plan (200 searches/month, no credit card)</li>
+              <li>Copy your key (labeled <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">x-rapidapi-key</code>) and paste it into the JSearch field in Settings</li>
+            </ol>
+            <div style="color:#64748b;font-size:12.5px;margin-top:4px;">Don't want to bother? Just turn JSearch off &mdash; you'll still get LinkedIn jobs.</div>
+          </li>
+          <li><strong>LinkedIn</strong> &mdash; to pull LinkedIn listings, run this once in your terminal, sign in when the window opens, then close it:
+            <div style="background:#0f172a;color:#e2e8f0;border-radius:6px;padding:10px 12px;margin:6px 0;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">job-scout linkedin login</div>
+            Then switch LinkedIn on in Settings. It rides <em>your</em> logged-in session on your own machine &mdash; nothing leaves your computer.
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>4. Use it day to day</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        <ul style="margin:0;padding-left:20px;">
+          <li style="margin-bottom:6px;"><strong>Matches</strong> &mdash; your scored jobs. <strong>Mark Applied</strong> logs it to your activity log, <strong>Tailor</strong> prepares a tailored resume, <strong>&times;</strong> dismisses it (you can undo a dismissal).</li>
+          <li style="margin-bottom:6px;"><strong>Job Search Log</strong> &mdash; your weekly activity tracker (default 5/week for Colorado unemployment; change it in Settings if your state differs) with <strong>Export CSV</strong> for your records. Keep records for 2 years in case of an audit.</li>
+          <li><strong>Resumes</strong> &mdash; your resume library, base and tailored.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>5. Scoring (optional upgrade)</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        The default is <strong>free keyword scoring</strong> &mdash; no setup, works for everyone. For smarter AI scoring, pick a provider in <a href="#" onclick="switchTab('settings');return false;" style="color:#1A3A5C;font-weight:600;">Settings</a>: <strong>Haiku</strong> (uses your own Anthropic API key) or <strong>Ollama</strong> (your own local AI machine).
+      </div>
+    </div>
+
+    <div class="settings-section" style="background:#f8fafc;">
+      <h3>Your data &amp; privacy</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        Everything &mdash; your matches, activity log, resumes, settings &mdash; lives in one file on your computer at <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">~/.job-scout/job-scout.db</code>. To back it up, copy that file. Nothing is sent to any server we run.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Trouble?</h3>
+      <div style="font-size:13.5px;color:#374151;line-height:1.7;">
+        <ul style="margin:0;padding-left:20px;">
+          <li style="margin-bottom:5px;"><strong>No jobs showing?</strong> Add your JSearch key (above) or connect LinkedIn, set your search terms in Settings, then click <strong>Refresh</strong> on the Matches tab.</li>
+          <li style="margin-bottom:5px;"><strong>LinkedIn says it's disconnected?</strong> Run <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">job-scout linkedin login</code> again &mdash; your LinkedIn session expires every few days.</li>
+          <li>This same guide ships in the repo as <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">GETTING-STARTED.md</code>.</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -1450,7 +1577,7 @@ function confirmDismiss() {
   const row = document.querySelector(`.btn-dismiss[data-guid="${guid}"]`)?.closest('tr');
   if (row) row.remove();
   const remaining = document.querySelectorAll('#job-rows tr').length;
-  document.getElementById('subtitle').textContent = `${remaining} matched roles from Dice · Indeed · ZipRecruiter`;
+  document.getElementById('subtitle').textContent = `${remaining} matched roles`;
 }
 
 // ─── Dismissal context for AI scoring ─────────────────────────────────────────
@@ -1772,7 +1899,7 @@ function renderJobRows() {
       </tr>`;
     }).join('');
   }
-  document.getElementById('subtitle').textContent = `${visible.length} matched roles from Dice · Indeed · ZipRecruiter`;
+  document.getElementById('subtitle').textContent = `${visible.length} matched roles`;
 }
 
 function renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source) {
@@ -1813,7 +1940,7 @@ function renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source) {
   renderJobRows();
   renderPipeline();
   document.getElementById('key-status').innerHTML =
-    `<span style="color:#bbb;">Scheduled task searches Dice · Indeed · ZipRecruiter daily · Live refresh searches all three</span>`;
+    `<span style="color:#bbb;">Searches your job sources daily · Refresh fetches the latest</span>`;
   document.getElementById('disclaimer').textContent = [
     scoringFailed ? 'AI scoring unavailable — scores estimated by keyword.' : '',
     source === 'preloaded' ? 'Showing results from last scheduled task run. Reload to fetch live data.' : '',
@@ -2125,6 +2252,13 @@ function loadSettingsForm() {
   document.getElementById('st-zr').value     = s.zrSearchTerms     ? s.zrSearchTerms.join('\n')                 : '';
   const defaultMetro = LOCAL_AREA_RE.source.replace(/^\\b\(|\)\\b\/i$/g,'').split('|').filter(c=>c!=='remote').join(', ');
   document.getElementById('st-metro').value  = s.localMetroCities  ? s.localMetroCities.join(', ')               : defaultMetro;
+  // Job sources + scoring (re-platform additions)
+  const src = s.sources || {};
+  document.getElementById('st-rapidapi-key').value = s.rapidApiKey || '';
+  document.getElementById('st-src-jsearch').checked   = src.jsearch !== false;        // on by default
+  document.getElementById('st-src-li-guest').checked  = src.linkedinGuest !== false;  // on by default
+  document.getElementById('st-src-li-ride').checked   = !!src.linkedinRideAlong;      // off by default
+  document.getElementById('st-score-provider').value  = s.scoreProvider || 'keyword';
 }
 function saveSettingsForm() {
   const arrangements = [...document.querySelectorAll('input[name="st-arrange"]:checked')].map(cb => cb.value);
@@ -2153,6 +2287,15 @@ function saveSettingsForm() {
     localMetroCities:  metro.length       ? metro       : null,
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+    rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
+    scoreProvider: document.getElementById('st-score-provider').value,
+    sources: {
+      jsearch:           document.getElementById('st-src-jsearch').checked,
+      linkedinGuest:     document.getElementById('st-src-li-guest').checked,
+      linkedinRideAlong: document.getElementById('st-src-li-ride').checked,
+      appleMail: (getSettings().sources || {}).appleMail || false,
+      gmail:     (getSettings().sources || {}).gmail || false,
+    },
   });
   const msg = document.getElementById('settings-saved-msg');
   msg.style.display = 'inline';

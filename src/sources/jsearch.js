@@ -97,7 +97,7 @@ function buildQueries(settings) {
  * @returns {Promise<{jobs:object[], error:string|null}>}
  */
 async function searchJSearch(settings, opts = {}) {
-  const key = opts.key || process.env.RAPIDAPI_KEY;
+  const key = opts.key || (settings && settings.rapidApiKey) || process.env.RAPIDAPI_KEY;
   const doFetch = opts.fetchImpl || fetch;
   if (!key) return { jobs: [], error: 'no_rapidapi_key' };
 
