@@ -49,6 +49,20 @@ describe('voyager-parse', () => {
     const jobs = parseVoyagerJobCards([voyagerResponse, voyagerResponse]);
     assert.equal(jobs.length, 1);
   });
+  it('enriches company + location + remote from JobPostingCard when JobPosting omits them', () => {
+    // current LinkedIn shape: JobPosting carries only title+urn; the card carries the rest
+    const resp = { included: [
+      { $type: 'com.linkedin.voyager.dash.jobs.JobPosting', entityUrn: 'urn:li:fsd_jobPosting:4406118990', title: 'Engineering Manager' },
+      { $type: 'com.linkedin.voyager.dash.jobs.JobPostingCard', entityUrn: 'urn:li:fsd_jobPostingCard:4406118990',
+        jobPostingUrn: 'urn:li:fsd_jobPosting:4406118990',
+        primaryDescription: { text: 'Airbnb' }, secondaryDescription: { text: 'United States (Remote)' } },
+    ]};
+    const jobs = parseVoyagerJobCards(resp);
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].companyName, 'Airbnb');                          // from primaryDescription
+    assert.equal(jobs[0].jobLocation.displayName, 'United States (Remote)'); // from secondaryDescription
+    assert.equal(jobs[0].isRemote, true);                                // inferred from "(Remote)"
+  });
 });
 
 describe('guest html parse', () => {
@@ -107,11 +121,17 @@ describe('guest html parse', () => {
 
 describe('ownsCdp — never attach to a stranger\'s Chrome', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'js-cdp-'));
-  it('true only when DevToolsActivePort matches our port (else a foreign/absent Chrome)', () => {
-    fs.writeFileSync(path.join(dir, 'DevToolsActivePort'), '9239\n/devtools/browser/abc');
-    assert.equal(ownsCdp(9239, dir), true);    // our Chrome wrote this profile's port
-    assert.equal(ownsCdp(9222, dir), false);   // a different Chrome owns 9222 — not ours
-    assert.equal(ownsCdp(9239, path.join(dir, 'nope')), false); // no profile/file → not ours
+  it('true only when our sentinel matches the port AND its pid is alive', () => {
+    // our launch wrote a sentinel for THIS process (alive pid) on 9239
+    fs.writeFileSync(path.join(dir, '.jobscout-cdp.json'), JSON.stringify({ port: 9239, pid: process.pid }));
+    assert.equal(ownsCdp(9239, dir), true);    // our live Chrome
+    assert.equal(ownsCdp(9222, dir), false);   // sentinel is for 9239, a different port → not ours
+    assert.equal(ownsCdp(9239, path.join(dir, 'nope')), false); // no sentinel → not ours
+  });
+  it('false when the sentinel pid is dead (stale → a foreign Chrome may hold the port)', () => {
+    const dead = fs.mkdtempSync(path.join(os.tmpdir(), 'js-cdp-'));
+    fs.writeFileSync(path.join(dead, '.jobscout-cdp.json'), JSON.stringify({ port: 9239, pid: 999999999 }));
+    assert.equal(ownsCdp(9239, dead), false);
   });
 });
 

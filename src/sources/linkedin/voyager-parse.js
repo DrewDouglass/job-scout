@@ -13,6 +13,7 @@
  */
 
 const JOBPOSTING_TYPE_RE = /\.JobPosting$/;              // the entity itself (not JobPostingCard, etc.)
+const JOBCARD_TYPE_RE = /\.JobPostingCard$/;            // carries company + location LinkedIn moved off JobPosting
 const COMPANY_TYPE_RE = /\.(Company|Organization)$/;
 const COMPANY_URN_RE = /urn:li:(?:fsd_company|company|fsd_organization):\d+/i;
 const JOB_URN_ID_RE = /:(\d+)$/;
@@ -22,6 +23,9 @@ function jobIdFromUrn(urn) {
   const m = String(urn || '').match(JOB_URN_ID_RE);
   return m ? m[1] : null;
 }
+
+/** Voyager text fields are sometimes a bare string, sometimes { text }. Normalize to a string. */
+function textOf(v) { return typeof v === 'string' ? v : (v && v.text) || ''; }
 
 /** urn:li:fsd_workplaceType:1=On-site, 2=Remote, 3=Hybrid (LinkedIn's standard mapping). */
 function workplaceFromUrns(urns) {
@@ -54,21 +58,30 @@ function resolveCompanyName(jp, byUrn) {
   return '';
 }
 
-/** Normalize one JobPosting entity into Adli's job shape. */
-function normalizeVoyagerJob(jp, byUrn, id) {
-  const { workplaceTypes, isRemote } = workplaceFromUrns(jp.workplaceTypes || jp['*workplaceTypes']);
+/** Normalize one JobPosting entity into Adli's job shape, enriched from its JobPostingCard when present. */
+function normalizeVoyagerJob(jp, byUrn, id, card = null) {
+  let { workplaceTypes, isRemote } = workplaceFromUrns(jp.workplaceTypes || jp['*workplaceTypes']);
+  const company = resolveCompanyName(jp, byUrn) || (card && card.company) || '';
+  const location = jp.formattedLocation || jp.location || (card && card.location) || '';
+  // LinkedIn now omits workplaceType urns on the JobPosting; infer remote/hybrid from the card's
+  // location text ("United States (Remote)") when no urns were present.
+  const hadWorkplaceUrns = (jp.workplaceTypes || jp['*workplaceTypes'] || []).length > 0;
+  if (!hadWorkplaceUrns && location) {
+    if (/\(remote\)/i.test(location)) { workplaceTypes = ['Remote']; isRemote = true; }
+    else if (/\(hybrid\)/i.test(location)) { workplaceTypes = ['Hybrid']; }
+  }
   const listedAt = jp.listedAt || jp.originalListedAt || jp.createdAt;
   return {
     guid: 'linkedin_' + id,
-    title: jp.title || '',
-    companyName: resolveCompanyName(jp, byUrn),
-    jobLocation: { displayName: jp.formattedLocation || jp.location || '' },
+    title: jp.title || (card && card.title) || '',
+    companyName: company,
+    jobLocation: { displayName: location },
     postedDate: listedAt ? new Date(Number(listedAt)).toISOString() : null,
     salary: jp.salaryInsights?.compensationBreakdown || null, // usually absent on the card
     employmentType: jp.employmentStatus?.name || jp.employmentType || '',
     detailsPageUrl: `https://www.linkedin.com/jobs/view/${id}`,
     workplaceTypes,
-    isRemote,
+    isRemote: isRemote || /remote/i.test(location),
     source: 'LinkedIn',
     summary: jp.jobDescription?.text || jp.description?.text || '',
   };
@@ -85,6 +98,20 @@ function parseVoyagerJobCards(captured) {
   const byUrn = new Map();
   for (const e of included) if (e && e.entityUrn) byUrn.set(e.entityUrn, e);
 
+  // Index JobPostingCard by job id — it holds the company (primaryDescription) and location
+  // (secondaryDescription) that LinkedIn moved off the JobPosting entity.
+  const cardById = new Map();
+  for (const e of included) {
+    if (!e || !JOBCARD_TYPE_RE.test(e['$type'] || '')) continue;
+    const cid = jobIdFromUrn(e.jobPostingUrn || e['*jobPosting'] || e.preDashNormalizedJobPostingUrn || e.entityUrn);
+    if (!cid || cardById.has(cid)) continue;
+    cardById.set(cid, {
+      company: textOf(e.primaryDescription),
+      location: textOf(e.secondaryDescription),
+      title: textOf(e.title) || textOf(e.jobPostingTitle),
+    });
+  }
+
   const jobs = [];
   const seen = new Set();
   for (const e of included) {
@@ -92,7 +119,7 @@ function parseVoyagerJobCards(captured) {
     const id = jobIdFromUrn(e.entityUrn);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    jobs.push(normalizeVoyagerJob(e, byUrn, id));
+    jobs.push(normalizeVoyagerJob(e, byUrn, id, cardById.get(id)));
   }
   return jobs;
 }

@@ -74,15 +74,21 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function cdpReachable(port = PORT) { try { return (await fetch(`http://127.0.0.1:${port}/json/version`)).ok; } catch { return false; } }
 
-/**
- * True only if the Chrome listening on `port` is OUR dedicated instance. Chrome writes a
- * `DevToolsActivePort` file into its --user-data-dir whose first line is the debug port, so a match
- * proves the live Chrome on this port is the one we launched with OUR profile (not a stranger's).
- */
+// When we launch Chrome we drop a sentinel in OUR profile dir recording {port,pid}. That is how we
+// later prove a Chrome on the port is the one WE launched (DevTools' own DevToolsActivePort file is
+// unreliable for headful Chrome). A different tool's Chrome uses a different profile dir, so it never
+// has our sentinel — we never silently attach to a stranger's (wrong-account) session.
+const sentinelPath = (profileDir) => path.join(profileDir, '.jobscout-cdp.json');
+function writeSentinel(profileDir, port, pid) {
+  try { fs.mkdirSync(profileDir, { recursive: true }); fs.writeFileSync(sentinelPath(profileDir), JSON.stringify({ port, pid })); } catch {}
+}
+/** True only if the live Chrome on `port` is the one we launched (sentinel matches AND its pid is alive). */
 function ownsCdp(port, profileDir) {
   try {
-    const first = fs.readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf8').split('\n')[0].trim();
-    return first === String(port);
+    const s = JSON.parse(fs.readFileSync(sentinelPath(profileDir), 'utf8'));
+    if (Number(s.port) !== Number(port)) return false;
+    if (s.pid) { try { process.kill(s.pid, 0); } catch { return false; } }   // the Chrome we launched must still be running
+    return true;
   } catch { return false; }
 }
 
@@ -107,7 +113,7 @@ async function launchChrome({ headless = true, port = PORT, profileDir = PROFILE
   log(`launching ${headless ? 'headless' : 'HEADFUL'} dedicated Chrome (${bin})`);
   const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
   child.unref();
-  for (let i = 0; i < 60; i++) { if (await cdpReachable(port)) { log('dedicated Chrome CDP up'); return { reused: false, pid: child.pid }; } await sleep(500); }
+  for (let i = 0; i < 60; i++) { if (await cdpReachable(port)) { writeSentinel(profileDir, port, child.pid); log('dedicated Chrome CDP up'); return { reused: false, pid: child.pid }; } await sleep(500); }
   throw new Error(`Chrome did not expose CDP on :${port} within 30s`);
 }
 
