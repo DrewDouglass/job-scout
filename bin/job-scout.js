@@ -33,6 +33,13 @@ async function main() {
     return runCli(['node', 'observer', ...process.argv.slice(3)]);
   }
 
+  if (cmd === 'autostart') {
+    const { installAutostart } = require('../src/autostart');
+    try { console.log(installAutostart({ off: process.argv.includes('--off') })); }
+    catch (e) { console.error(e.message); process.exit(1); }
+    return;
+  }
+
   const db = new JobScoutDB();
   try {
     switch (cmd) {
@@ -90,6 +97,7 @@ function printHelp() {
   job-scout migrate <file>   import an Adli backup JSON
   job-scout linkedin login   one-time LinkedIn sign-in (dedicated browser profile)
   job-scout linkedin probe   discover the live LinkedIn job-cards responses
+  job-scout autostart        schedule a daily search; add --off to remove
   job-scout setup            first-run checklist
 `);
 }
