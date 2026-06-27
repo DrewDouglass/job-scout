@@ -9,6 +9,7 @@
 
 const { searchJSearch } = require('./sources/jsearch');
 const { searchLinkedIn } = require('./sources/linkedin');
+const { searchEmail } = require('./sources/email');
 const { dedupeJobs, getAppliedJobKeys, getDismissedJobKeys } = require('./lib/jobs');
 const { normalizeForMatch } = require('./lib/format');
 const { getEffectiveLocalAreaRe } = require('./lib/searchterms');
@@ -35,7 +36,11 @@ async function gather(settings, opts = {}) {
     canary = r.canary || null;
     if (r.error) errors.push(`linkedin:${r.error}`);
   }
-  // (email sources wire in here when enabled — opt-in, off by default)
+  if (src.appleMail || src.imap) {
+    const r = await (opts.emailImpl || searchEmail)(settings, opts);
+    all.push(...(r.jobs || []));
+    if (r.errors && r.errors.length) errors.push(...r.errors);
+  }
 
   const jobs = dedupeJobs(all);
   const counts = {};

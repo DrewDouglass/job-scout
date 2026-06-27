@@ -36,7 +36,8 @@ const DEFAULT_SETTINGS = {
   diceSearchTerms: null, indeedSearchTerms: null, zrSearchTerms: null, localMetroCities: null,
   // re-platform additions (provider/source config); absent in Adli's data, defaulted here:
   scoreProvider: 'keyword',        // keyword | haiku | ollama  — keyword is the free, portable default
-  sources: { jsearch: true, linkedinGuest: true, linkedinRideAlong: false, appleMail: false, gmail: false },
+  sources: { jsearch: true, linkedinGuest: true, linkedinRideAlong: false, appleMail: false, imap: false },
+  rapidApiKey: '', baseResume: '', imap: {},
 };
 
 function defaultDbPath() {

@@ -653,6 +653,23 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <input type="checkbox" id="st-src-li-ride"> <span><strong>LinkedIn (your account)</strong> &mdash; richer listings from your own session</span>
       </label>
       <div style="font-size:11px;color:#64748b;margin:4px 0 0 26px;">Run <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">job-scout linkedin login</code> once before turning this on.</div>
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
+        <div style="font-size:12px;font-weight:600;color:#374151;margin-bottom:8px;">Email job alerts <span style="font-weight:400;color:#94a3b8;">&mdash; optional, off by default</span></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;cursor:pointer;">
+          <input type="checkbox" id="st-src-applemail"> <span><strong>Apple Mail</strong> (Mac) &mdash; read job-alert emails from your Mail app</span>
+        </label>
+        <div style="font-size:11px;color:#64748b;margin:0 0 12px 26px;">Needs Full Disk Access for your terminal (System Settings &rarr; Privacy &amp; Security &rarr; Full Disk Access). Reads locally; nothing leaves your computer.</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer;">
+          <input type="checkbox" id="st-src-imap"> <span><strong>Gmail / other</strong> via an IMAP app password</span>
+        </label>
+        <div class="settings-row" style="margin:0 0 0 26px;">
+          <div class="settings-field"><label style="font-size:12px;">Provider</label>
+            <select id="st-imap-provider" style="font-size:13px;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;"><option value="gmail">Gmail</option><option value="icloud">iCloud</option><option value="outlook">Outlook</option><option value="yahoo">Yahoo</option></select></div>
+          <div class="settings-field"><label style="font-size:12px;">Email address</label><input id="st-imap-user" placeholder="you@gmail.com" autocomplete="off"></div>
+          <div class="settings-field"><label style="font-size:12px;">App password</label><input id="st-imap-pass" type="password" placeholder="app password (not your login password)" autocomplete="off"></div>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin:4px 0 0 26px;">Use an <strong>app password</strong>, not your normal password (Gmail: Account &rarr; Security &rarr; App passwords). Stored locally only.</div>
+      </div>
     </div>
     <div class="settings-section">
       <h3>AI Scoring</h3>
@@ -2268,6 +2285,12 @@ function loadSettingsForm() {
   document.getElementById('st-src-li-guest').checked  = src.linkedinGuest !== false;  // on by default
   document.getElementById('st-src-li-ride').checked   = !!src.linkedinRideAlong;      // off by default
   document.getElementById('st-score-provider').value  = s.scoreProvider || 'keyword';
+  document.getElementById('st-src-applemail').checked = !!src.appleMail;              // off by default
+  document.getElementById('st-src-imap').checked      = !!src.imap;                   // off by default
+  const imap = s.imap || {};
+  document.getElementById('st-imap-provider').value = imap.provider || 'gmail';
+  document.getElementById('st-imap-user').value = imap.user || '';
+  document.getElementById('st-imap-pass').value = imap.appPassword || '';
 }
 function saveSettingsForm() {
   const arrangements = [...document.querySelectorAll('input[name="st-arrange"]:checked')].map(cb => cb.value);
@@ -2302,8 +2325,13 @@ function saveSettingsForm() {
       jsearch:           document.getElementById('st-src-jsearch').checked,
       linkedinGuest:     document.getElementById('st-src-li-guest').checked,
       linkedinRideAlong: document.getElementById('st-src-li-ride').checked,
-      appleMail: (getSettings().sources || {}).appleMail || false,
-      gmail:     (getSettings().sources || {}).gmail || false,
+      appleMail:         document.getElementById('st-src-applemail').checked,
+      imap:              document.getElementById('st-src-imap').checked,
+    },
+    imap: {
+      provider:    document.getElementById('st-imap-provider').value,
+      user:        document.getElementById('st-imap-user').value.trim(),
+      appPassword: document.getElementById('st-imap-pass').value,
     },
   });
   const msg = document.getElementById('settings-saved-msg');
