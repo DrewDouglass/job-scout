@@ -56,6 +56,12 @@ job-scout linkedin login
 
 Then switch **LinkedIn** on in Settings. It rides *your* logged-in session on *your own machine* — nothing leaves your computer. (Your LinkedIn session expires every few days; if the app says it's disconnected, just run that command again.)
 
+### Email job alerts (optional, off by default)
+If you already get job-alert emails from LinkedIn, Indeed, and the like, Job Scout can read those straight from *your own* mailbox and fold them into your matches. It's a bonus net — LinkedIn and JSearch already cover most jobs — so leave it off if your alert emails are noisy. Two ways, both off until you turn them on:
+
+- **Apple Mail** (Mac only) — tick the box in Settings. The first run, macOS asks you to give your terminal **Full Disk Access** (System Settings → Privacy & Security → Full Disk Access → add **Terminal**). It only reads your Mail locally; nothing is sent anywhere.
+- **Gmail / iCloud / Outlook / Yahoo** — pick your provider, enter your email, and paste an **app password** (not your normal login password). In Gmail that's **Account → Security → App passwords**; iCloud/Outlook/Yahoo have the same feature. The app password is stored only on your computer.
+
 ---
 
 ## 4. Use it day to day
