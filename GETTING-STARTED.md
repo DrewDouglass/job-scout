@@ -48,13 +48,16 @@ It needs a **free** key:
 Don't want to bother? **Turn JSearch off** — you'll still get LinkedIn jobs.
 
 ### LinkedIn
-To pull LinkedIn listings, run this once in your terminal, sign in when the window opens, then close it:
+LinkedIn works two ways. Use either or both:
 
-```
-job-scout linkedin login
-```
+- **LinkedIn (public)** — on by default, no login, nothing to set up. Pulls public job listings.
+- **LinkedIn (your account)** — sign in once for richer, more complete results from your own logged-in session. Run this in your terminal, sign in when the window opens (including 2FA), then close it:
 
-Then switch **LinkedIn** on in Settings. It rides *your* logged-in session on *your own machine* — nothing leaves your computer. (Your LinkedIn session expires every few days; if the app says it's disconnected, just run that command again.)
+  ```
+  job-scout linkedin login
+  ```
+
+  Then switch **LinkedIn (your account)** on in Settings. It rides *your* session on *your own machine* — nothing leaves your computer, and it searches with the same job titles you set in your profile. (Your LinkedIn session expires every few days; if the app says it's disconnected, just run that command again.)
 
 ### Email job alerts (optional, off by default)
 If you already get job-alert emails from LinkedIn, Indeed, and the like, Job Scout can read those straight from *your own* mailbox and fold them into your matches. It's a bonus net — LinkedIn and JSearch already cover most jobs — so leave it off if your alert emails are noisy. Two ways, both off until you turn them on:
