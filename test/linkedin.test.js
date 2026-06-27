@@ -5,10 +5,14 @@
  */
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { parseVoyagerJobCards, jobIdFromUrn, workplaceFromUrns } = require('../src/sources/linkedin/voyager-parse');
 const { parseGuestHtml } = require('../src/sources/linkedin/guest');
 const { evaluateCanary } = require('../src/sources/linkedin/canary');
 const { findChrome } = require('../src/sources/linkedin/chrome');
+const { ownsCdp } = require('../src/sources/linkedin/observer');
 
 describe('voyager-parse', () => {
   const voyagerResponse = {
@@ -99,6 +103,16 @@ describe('guest html parse', () => {
     assert.equal(jobs[0].detailsPageUrl, 'https://www.linkedin.com/jobs/view/4406118990');
   });
   it('returns [] for empty input', () => { assert.deepEqual(parseGuestHtml(''), []); });
+});
+
+describe('ownsCdp — never attach to a stranger\'s Chrome', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'js-cdp-'));
+  it('true only when DevToolsActivePort matches our port (else a foreign/absent Chrome)', () => {
+    fs.writeFileSync(path.join(dir, 'DevToolsActivePort'), '9239\n/devtools/browser/abc');
+    assert.equal(ownsCdp(9239, dir), true);    // our Chrome wrote this profile's port
+    assert.equal(ownsCdp(9222, dir), false);   // a different Chrome owns 9222 — not ours
+    assert.equal(ownsCdp(9239, path.join(dir, 'nope')), false); // no profile/file → not ours
+  });
 });
 
 describe('canary (never silent-empty)', () => {

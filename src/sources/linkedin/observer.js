@@ -24,7 +24,9 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { findChrome } = require('./chrome');
 
-const PORT = Number(process.env.LINKEDIN_CDP_PORT || 9222);
+// Job-scout's OWN CDP port. Deliberately NOT 9222 (Chrome's default debug port), so we never
+// collide with another debug-Chrome the user runs — e.g. a separate LinkedIn observer. Overridable.
+const PORT = Number(process.env.LINKEDIN_CDP_PORT || 9239);
 const PROFILE_DIR = process.env.LINKEDIN_CHROME_PROFILE
   || path.join(process.env.JOB_SCOUT_HOME || path.join(os.homedir(), '.job-scout'), 'linkedin', 'chrome-profile');
 // URLs the jobs page fetches for the cards. Match by SUBSTRING — never the rotating queryId/decorationId.
@@ -72,9 +74,26 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function cdpReachable(port = PORT) { try { return (await fetch(`http://127.0.0.1:${port}/json/version`)).ok; } catch { return false; } }
 
+/**
+ * True only if the Chrome listening on `port` is OUR dedicated instance. Chrome writes a
+ * `DevToolsActivePort` file into its --user-data-dir whose first line is the debug port, so a match
+ * proves the live Chrome on this port is the one we launched with OUR profile (not a stranger's).
+ */
+function ownsCdp(port, profileDir) {
+  try {
+    const first = fs.readFileSync(path.join(profileDir, 'DevToolsActivePort'), 'utf8').split('\n')[0].trim();
+    return first === String(port);
+  } catch { return false; }
+}
+
 /** Launch the dedicated Chrome (headful for login, headless for capture). Detached so it outlives this process. */
 async function launchChrome({ headless = true, port = PORT, profileDir = PROFILE_DIR, startUrl = 'https://www.linkedin.com/jobs/' } = {}) {
-  if (await cdpReachable(port)) { log(`Chrome CDP already up on :${port}`); return { reused: true }; }
+  if (await cdpReachable(port)) {
+    // Only reuse a Chrome that is genuinely ours — never silently attach to a different debug-Chrome
+    // (e.g. another LinkedIn observer), which would read the WRONG account's session.
+    if (ownsCdp(port, profileDir)) { log(`reusing job-scout's Chrome on :${port}`); return { reused: true }; }
+    throw new Error(`Port ${port} is already in use by a different Chrome (not job-scout). Close it, or set LINKEDIN_CDP_PORT to a free port and retry.`);
+  }
   const bin = findChrome();
   if (!bin) throw new Error('Chrome/Chromium not found. Install Chrome or set CHROME_PATH.');
   fs.mkdirSync(profileDir, { recursive: true });
@@ -191,4 +210,4 @@ After that, capture runs headless against this profile. Re-run this 'login' comm
 
 if (require.main === module) runCli(process.argv).catch(e => { log('fatal:', e.stack || e.message); process.exit(1); });
 
-module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, runCli, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };
+module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, runCli, ownsCdp, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };
