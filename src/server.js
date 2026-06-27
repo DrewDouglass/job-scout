@@ -12,6 +12,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { applyDisplayFilters, displayContext } = require('./pipeline');
+const { tailorResume, homeDir } = require('./tailor');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
@@ -145,6 +146,32 @@ function createServer(db) {
       if (p === '/api/resumes/replace' && req.method === 'POST') { const { resumes } = await readBody(req); db.replaceResumes(resumes || []); return sendJson(res, 200, { ok: true }); }
 
       if (p === '/api/status' && req.method === 'GET') { const run = db.lastRun(); return sendJson(res, 200, { run }); }
+
+      // resume tailoring — end-to-end (.docx + .pdf), using the configured AI provider + the saved base resume
+      if (p === '/api/tailor' && req.method === 'POST') {
+        const { guid } = await readBody(req);
+        const job = db.getJob(guid);
+        if (!job) return sendJson(res, 200, { ok: false, error: 'job_not_found' });
+        const settings = db.getSettings();
+        try {
+          const r = await tailorResume(db, { job, baseResumeText: settings.baseResume || '', settings });
+          return sendJson(res, 200, { ok: true, docxFile: r.docxFile, pdfFile: r.pdfFile });
+        } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
+      }
+      // download a generated resume file (sanitized to the resumes dir)
+      if (p === '/download' && req.method === 'GET') {
+        const resumesDir = path.join(homeDir(), 'resumes');
+        const name = path.basename(url.searchParams.get('file') || '');
+        const fp = path.join(resumesDir, name);
+        if (name && fp.startsWith(resumesDir) && fs.existsSync(fp)) {
+          const ct = name.endsWith('.pdf') ? 'application/pdf'
+            : name.endsWith('.docx') ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/octet-stream';
+          res.writeHead(200, { 'content-type': ct, 'content-disposition': `attachment; filename="${name}"` });
+          return res.end(fs.readFileSync(fp));
+        }
+        res.writeHead(404); return res.end('not found');
+      }
       if (p === '/api/refresh' && req.method === 'POST') {
         const { runDaily } = require('./pipeline');
         try { const r = await runDaily(db, db.getSettings(), {}); return sendJson(res, 200, { ok: true, ...r }); }

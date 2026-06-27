@@ -23,6 +23,8 @@ if ($major -lt 24) {
 
 # Put a `job-scout` command on your PATH (no publish needed - links this folder).
 Set-Location (Split-Path $PSScriptRoot -Parent)
+Write-Host "Installing dependencies..."
+npm install --no-audit --no-fund
 npm link
 
 Write-Host ""

@@ -21,6 +21,8 @@ fi
 
 # Put a `job-scout` command on your PATH (no publish needed — links this folder).
 cd "$(dirname "$0")/.."
+echo "Installing dependencies…"
+npm install --no-audit --no-fund
 if ! npm link >/dev/null 2>&1; then
   echo "Could not link globally without elevated permissions; trying with sudo…"
   sudo npm link

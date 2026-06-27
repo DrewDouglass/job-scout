@@ -171,4 +171,53 @@ async function scoreJobs(jobs, opts = {}) {
   return { jobs: out, provider, aiUsed: !!scores, error: scores ? null : (error || 'no_valid_scores') };
 }
 
-module.exports = { scoreJobs, buildScorePrompt, parseScores, dismissalContext, SCORE_SCHEMA, HAIKU_MODEL };
+/** Parse an object out of model text (tolerant of chatty wrappers). */
+function safeParseObject(text) {
+  if (!text) return null;
+  try { return JSON.parse(text); } catch {}
+  const m = String(text).match(/\{[\s\S]*\}/);
+  if (m) { try { return JSON.parse(m[0]); } catch { return null; } }
+  return null;
+}
+
+/**
+ * Generic structured generation against a provider (reused by resume tailoring).
+ * @returns {Promise<object|null>} parsed object matching `schema`, or null on a parse miss.
+ * @throws on no key / http error / a provider with no model (e.g. 'keyword').
+ */
+async function generateJSON({ provider, prompt, schema, system, opts = {} }) {
+  const doFetch = opts.fetchImpl || fetch;
+  if (provider === 'haiku') {
+    const key = opts.anthropicKey || process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error('no_anthropic_key');
+    const res = await doFetch(ANTHROPIC_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: opts.model || HAIKU_MODEL, max_tokens: opts.maxTokens || 4096,
+        output_config: { format: { type: 'json_schema', schema } },
+        messages: [{ role: 'user', content: (system ? system + '\n\n' : '') + prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`anthropic_http_${res.status}`);
+    const data = await res.json();
+    return safeParseObject((data.content || []).filter(b => b.type === 'text').map(b => b.text).join(''));
+  }
+  if (provider === 'ollama') {
+    const url = opts.ollamaUrl || process.env.OLLAMA_URL || OLLAMA_DEFAULT_URL;
+    const res = await doFetch(url, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: opts.model || process.env.OLLAMA_MODEL || OLLAMA_DEFAULT_MODEL,
+        stream: false, format: schema, options: { temperature: 0, num_ctx: opts.numCtx || 8192 },
+        messages: [{ role: 'system', content: system || 'Return ONLY JSON matching the schema.' }, { role: 'user', content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`ollama_http_${res.status}`);
+    const data = await res.json();
+    return safeParseObject(data.message?.content || '');
+  }
+  throw new Error(`needs_ai_provider`); // 'keyword' (or unknown) can't generate — caller surfaces a friendly message
+}
+
+module.exports = { scoreJobs, buildScorePrompt, parseScores, dismissalContext, generateJSON, safeParseObject, SCORE_SCHEMA, HAIKU_MODEL };

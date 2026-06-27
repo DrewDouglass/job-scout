@@ -561,6 +561,15 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
 
 <!-- Resumes panel -->
 <div id="tab-resumes" class="tab-panel">
+  <div class="settings-section" style="background:#f8fafc;margin-bottom:16px;">
+    <h3>Your Base Resume <span style="font-weight:400;color:#94a3b8;font-size:12px;">&mdash; used by the Tailor button</span></h3>
+    <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Paste your full resume as plain text. The <strong>Tailor</strong> button on any job rewrites this for that role &mdash; truthfully, it never invents experience &mdash; and saves a <strong>.docx + .pdf</strong> you can download. (Tailoring uses your AI provider; set one in <a href="#" onclick="switchTab('settings');return false;" style="color:#1A3A5C;">Settings &rarr; AI Scoring</a>.)</div>
+    <textarea id="st-base-resume" rows="8" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;" placeholder="Paste your resume text here — name, contact, summary, experience, skills…"></textarea>
+    <div style="margin-top:8px;">
+      <button onclick="saveBaseResume()" style="padding:6px 16px;background:#1A3A5C;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save Base Resume</button>
+      <span id="base-resume-saved" style="display:none;color:#16a34a;font-size:12px;font-weight:600;margin-left:8px;">&#x2713; Saved</span>
+    </div>
+  </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
       <div style="font-weight:700;color:#1A3A5C;font-size:15px;">Resume Library</div>
@@ -2325,6 +2334,49 @@ function resetSettings() {
 updateActFormFields();
 run();
 initAutoBackup();
+</script>
+
+<script>
+// ─── Resume tailoring (standalone: end-to-end on the server, replaces the Cowork clipboard prompt) ───
+window.saveBaseResume = function(){
+  setSettings({ baseResume: document.getElementById('st-base-resume').value });
+  var s = document.getElementById('base-resume-saved'); if(s){ s.style.display='inline'; setTimeout(function(){ s.style.display='none'; }, 2000); }
+};
+(function(){ var bt = document.getElementById('st-base-resume'); if(bt) bt.value = (getSettings().baseResume) || ''; })();
+
+window.jsTailorClose = function(){ var m=document.getElementById('js-tailor-modal'); if(m) m.remove(); };
+function jsTailorShow(html){
+  var m=document.getElementById('js-tailor-modal');
+  if(!m){
+    m=document.createElement('div'); m.id='js-tailor-modal';
+    m.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    m.innerHTML='<div style="background:white;border-radius:12px;padding:22px 24px;max-width:470px;box-shadow:0 12px 40px rgba(0,0,0,.25);">'
+      +'<div id="js-tailor-body" style="font-size:14px;color:#1A3A5C;line-height:1.6;"></div>'
+      +'<div style="text-align:right;margin-top:16px;"><button onclick="jsTailorClose()" style="font-size:13px;padding:6px 16px;background:#1A3A5C;border:none;border-radius:6px;color:white;cursor:pointer;">Close</button></div></div>';
+    document.body.appendChild(m);
+  }
+  m.style.display='flex'; document.getElementById('js-tailor-body').innerHTML=html;
+}
+function jsTailorError(code){
+  if(code==='no_base_resume') return 'Add your base resume first &mdash; paste it at the top of the <b>Resumes</b> tab and Save, then click Tailor again.';
+  if(code==='needs_ai_provider'||code==='no_anthropic_key') return 'Resume tailoring needs an AI provider. In <b>Settings &rarr; AI Scoring</b>, pick Claude Haiku (with your Anthropic API key) or Ollama, then try again.';
+  if(code==='tailor_failed') return 'The AI could not produce a tailored resume this time. Please try again.';
+  return 'Could not tailor: '+code;
+}
+window.tailorResume = async function(guid){
+  var job = (window.JOB_MAP && JOB_MAP[guid]) || {};
+  jsTailorShow('Tailoring your resume for <b>'+(job.title||'this role')+'</b>&hellip;<br><span style="color:#64748b;font-size:12px;">This can take a few seconds.</span>');
+  try{
+    var res = await fetch('/api/tailor',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({guid:guid})});
+    var data = await res.json();
+    if(!data.ok){ jsTailorShow(jsTailorError(data.error)); return; }
+    jsTailorShow('&#x2705; Tailored resume saved to your Resumes.<br><br>'
+      +'<a href="/download?file='+encodeURIComponent(data.docxFile)+'" style="color:#1A3A5C;font-weight:700;">&#x2193; Download .docx</a>'
+      +' &nbsp;&nbsp; <a href="/download?file='+encodeURIComponent(data.pdfFile)+'" style="color:#1A3A5C;font-weight:700;">&#x2193; Download .pdf</a>'
+      +'<br><br><span style="color:#64748b;font-size:12px;">Always review before sending. The AI will not invent experience, but check the wording.</span>');
+    if(typeof renderResumes==='function') renderResumes();
+  }catch(e){ jsTailorShow('Tailoring failed: '+e.message); }
+};
 </script>
 </body>
 </html>
