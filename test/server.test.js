@@ -68,6 +68,12 @@ describe('server', () => {
     assert.equal(acts.a1.employer, 'Acme');
   });
 
+  it('POST /api/activities without an id returns a clean 400, not a raw SQLite error', async () => {
+    const r = await req('POST', '/api/activities', { employer: 'NoId Inc' });
+    assert.equal(r.status, 400);
+    assert.match(r.json().error, /requires an id/);
+  });
+
   it('POST /api/dismiss then /api/undismiss removes and restores the job', async () => {
     await req('POST', '/api/dismiss', { guid: 'srv1', reason: 'test' });
     assert.equal((await req('GET', '/api/jobs')).json().jobs.length, 0);

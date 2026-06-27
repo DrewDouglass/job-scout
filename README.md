@@ -6,19 +6,31 @@ A private, self-hosting job-search dashboard. It searches job boards and LinkedI
 
 ## What changed in the re-platform
 
-- **Runs standalone** — a small local web server (Node, zero runtime dependencies) + SQLite, instead of a Claude Cowork artifact with browser `localStorage`.
-- **Portable** — built-in `node:sqlite` (no native compile), runs on macOS / Windows / Linux. Requires Node 24+.
+- **Runs standalone** — a small local web server (Node) + SQLite, instead of a Claude Cowork artifact with browser `localStorage`. Only three small, pure-JavaScript dependencies (`docx` + `pdfkit` for resume export, `imapflow` for the optional email reader); the core needs no native compilation.
+- **Portable** — built-in `node:sqlite` (no native compile), runs on macOS / Windows / Linux. Requires Node 24+ (the current LTS).
 - **Real job sources** — Adli's Cowork board connectors (Dice, Indeed, ZipRecruiter via per-user MCP UUIDs) are replaced by **JSearch** (one free RapidAPI key covering Indeed/ZipRecruiter/Glassdoor & more) plus a **LinkedIn ride-along** that reads your own logged-in session, and optional email-alert readers.
 - **End-to-end** — scoring and resume tailoring run for real (no copy-paste), free on a keyword baseline or via Claude Haiku / a local Ollama model.
 - **Reversible dismiss**, durable activity log, and a daily refresh job.
 
 ## Quick start
 
+**First time:** install [Node 24+](https://nodejs.org), then from inside this folder run the installer for your OS:
+
+```
+# macOS / Linux
+bash scripts/install.sh
+
+# Windows (PowerShell)
+.\scripts\install.ps1
+```
+
+It installs the dependencies and adds a `job-scout` command. After that:
+
 ```
 job-scout serve     # then open http://127.0.0.1:7777
 ```
 
-Full setup (job sources, LinkedIn, scoring) is in **[GETTING-STARTED.md](GETTING-STARTED.md)** and inside the app under the **ℹ️ Setup & Help** tab.
+Open the **ℹ️ Setup & Help** tab in the app (or **[GETTING-STARTED.md](GETTING-STARTED.md)**) to connect your job sources, LinkedIn, and scoring. Optional daily auto-refresh: `job-scout autostart`.
 
 ## License
 

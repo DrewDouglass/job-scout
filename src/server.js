@@ -132,7 +132,7 @@ function createServer(db) {
       if (p === '/api/settings/reset' && req.method === 'POST') { db.resetSettings(); return sendJson(res, 200, db.getSettings()); }
 
       if (p === '/api/activities' && req.method === 'GET') return sendJson(res, 200, db.getActs());
-      if (p === '/api/activities' && req.method === 'POST') { const a = await readBody(req); db.putActivity(a); return sendJson(res, 200, { ok: true, id: a.id }); }
+      if (p === '/api/activities' && req.method === 'POST') { const a = await readBody(req); if (!a || a.id == null) return sendJson(res, 400, { error: 'activity requires an id' }); db.putActivity(a); return sendJson(res, 200, { ok: true, id: a.id }); }
       if (p === '/api/activities/delete' && req.method === 'POST') { const { id } = await readBody(req); db.deleteActivity(id); return sendJson(res, 200, { ok: true }); }
       if (p === '/api/activities/replace' && req.method === 'POST') { const { acts } = await readBody(req); db.replaceActivities(acts || {}); return sendJson(res, 200, { ok: true }); }
 

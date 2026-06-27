@@ -12,11 +12,13 @@
  */
 const { JobScoutDB } = require('../src/db');
 
-const MIN_NODE_MAJOR = 22; // node:sqlite is flag-free since 22.13; Node 24 LTS recommended
+// Node 24 LTS floor: node:sqlite (the built-in database this tool runs on) is STABLE in Node 24.
+// In Node 22 it's experimental and prints a warning, so we require 24 for a clean experience.
+const MIN_NODE_MAJOR = 24;
 function checkNode() {
   const major = Number(process.versions.node.split('.')[0]);
   if (major < MIN_NODE_MAJOR) {
-    console.error(`job-scout needs Node ${MIN_NODE_MAJOR}+ (you have ${process.version}). node:sqlite is the reason — please upgrade Node (Node 24 LTS recommended).`);
+    console.error(`job-scout needs Node ${MIN_NODE_MAJOR}+ (you have ${process.version}). The built-in node:sqlite database is the reason — please install Node ${MIN_NODE_MAJOR} LTS from https://nodejs.org and re-run.`);
     process.exit(1);
   }
 }
