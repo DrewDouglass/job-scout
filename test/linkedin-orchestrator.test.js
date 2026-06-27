@@ -61,6 +61,15 @@ describe('searchLinkedIn orchestration', () => {
     assert.equal(r.jobs.length, 1);
   });
 
+  it('fires a LOUD guest canary on shape drift (pages came back but 0 parsed), never silent-empty', async () => {
+    const r = await searchLinkedIn(baseSettings({ sources: { linkedinRideAlong: false, linkedinGuest: true } }), {
+      guestImpl: async () => ({ jobs: [], error: null, okResponses: 1, parsedCount: 0 }),
+    });
+    assert.equal(r.jobs.length, 0);
+    assert.equal(r.canary.degraded, true);
+    assert.equal(r.canary.reason, 'guest_shape_drift');   // surfaced, not swallowed
+  });
+
   it('returns nothing when both LinkedIn sources are off', async () => {
     const r = await searchLinkedIn(baseSettings({ sources: { linkedinRideAlong: false, linkedinGuest: false } }), {});
     assert.equal(r.source, 'none');

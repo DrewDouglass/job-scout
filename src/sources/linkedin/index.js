@@ -14,6 +14,24 @@ const { searchLinkedInGuest } = require('./guest');
 const DEAD_CANARY = () => evaluateCanary({ sessionAlive: false, httpStatuses: [], matchedResponses: 0, parsedJobCount: 0 });
 
 /**
+ * Canary for the no-login guest feed. Returns null when healthy (the contract: null = nothing to
+ * surface) and a loud degraded status when the feed is reachable-but-unreadable (LinkedIn changed
+ * its markup) or unreachable — so the guest path is never silently empty either.
+ */
+function guestCanary(g) {
+  if ((g.jobs || []).length > 0) return null;                       // healthy → no problem to raise
+  if ((g.okResponses || 0) > 0 && (g.parsedCount || 0) === 0) {
+    return { ok: false, degraded: true, reason: 'guest_shape_drift',
+      message: "LinkedIn's public job feed returned pages but no readable jobs — LinkedIn likely changed its markup. Check for a job-scout update. (JSearch results are unaffected.)" };
+  }
+  if (g.error) {
+    return { ok: false, degraded: true, reason: 'guest_unreachable',
+      message: "Couldn't reach LinkedIn's public job feed right now (network or rate limit). It will retry next run. (JSearch results are unaffected.)" };
+  }
+  return null;   // genuinely no results (or a caller without meta) → don't fabricate an alarm
+}
+
+/**
  * @param {object} settings
  * @param {object} opts
  *   opts.launchImpl(opts)         -> ensure the dedicated headless Chrome (default: observer.launchChrome)
@@ -51,9 +69,10 @@ async function searchLinkedIn(settings, opts = {}) {
     }
   }
 
-  // Ride-along off → guest baseline (account-safe default).
+  // Ride-along off → guest baseline (account-safe default). Surface a loud canary if the guest
+  // feed is reachable-but-unreadable or unreachable, so this path is never silently empty.
   const g = await guest();
-  return { jobs: g.jobs, canary: null, source: guestEnabled ? 'guest' : 'none', error: g.error };
+  return { jobs: g.jobs, canary: guestEnabled ? guestCanary(g) : null, source: guestEnabled ? 'guest' : 'none', error: g.error };
 }
 
 module.exports = { searchLinkedIn };

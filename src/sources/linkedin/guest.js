@@ -30,9 +30,14 @@ function parseGuestHtml(html) {
   // Each result is an <li> ... </li> containing a base-card. Split tolerantly on <li boundaries.
   const blocks = String(html).split(/<li[ >]/i).slice(1);
   for (const block of blocks) {
+    // Job id: prefer the stable data-entity-urn; else the trailing numeric id in the jobs/view PATH.
+    // LinkedIn changed guest links from /jobs/view/<id> to /jobs/view/<slug>-<id>?<tracking>, which
+    // broke the old `/jobs/view/(\d+)` match. data-entity-urn is the durable anchor.
+    const urn = (block.match(/data-entity-urn="urn:li:job[Pp]osting:(\d+)"/i) || [])[1];
+    let hrefId = null;
     const href = (block.match(/href="([^"]*\/jobs\/view\/[^"]+)"/i) || [])[1] || '';
-    const idMatch = href.match(/\/jobs\/view\/(\d+)/);
-    const id = idMatch ? idMatch[1] : null;
+    if (href) { const ids = href.split('?')[0].match(/\d{6,}/g); if (ids) hrefId = ids[ids.length - 1]; }
+    const id = urn || hrefId || null;
     if (!id || seen.has(id)) continue;
     const title = firstMatch(block, /class="[^"]*_title[^"]*"[^>]*>([\s\S]*?)<\//i);
     const company = firstMatch(block, /class="[^"]*_subtitle[^"]*"[^>]*>([\s\S]*?)<\/(?:h4|div|a|span)>/i);
@@ -78,6 +83,8 @@ async function searchLinkedInGuest(settings, opts = {}) {
   const seen = new Set();
   let error = null;
   let firstReq = true;
+  let okResponses = 0;   // # of real (200, non-trivial) pages we got back
+  let parsedCount = 0;   // # of cards parsed across them — okResponses>0 && parsedCount===0 means shape drift
 
   for (const term of terms) {
     for (let page = 0; page < pages; page++) {
@@ -89,15 +96,17 @@ async function searchLinkedInGuest(settings, opts = {}) {
         const res = await doFetch(`${BASE}?${params.toString()}`, {
           headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
         });
-        if (!res.ok) { error = `http_${res.status}`; if (res.status === 429) return { jobs: out, error }; continue; }
+        if (!res.ok) { error = `http_${res.status}`; if (res.status === 429) return { jobs: out, error, okResponses, parsedCount }; continue; }
         const html = await res.text();
+        if (html && html.length > 500) okResponses++;     // a real page came back (not empty/blocked)
         const parsed = parseGuestHtml(html);
-        if (!parsed.length) break; // no more pages for this term
+        parsedCount += parsed.length;
+        if (!parsed.length) break; // no cards on this page → stop paging this term
         for (const j of parsed) if (!seen.has(j.guid)) { seen.add(j.guid); out.push(j); }
       } catch (e) { error = String(e && e.message || e); }
     }
   }
-  return { jobs: out, error: out.length ? null : error };
+  return { jobs: out, error: out.length ? null : error, okResponses, parsedCount };
 }
 
 module.exports = { searchLinkedInGuest, parseGuestHtml };

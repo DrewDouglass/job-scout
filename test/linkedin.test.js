@@ -79,6 +79,25 @@ describe('guest html parse', () => {
     assert.equal(jobs[1].isRemote, false);
     assert.equal(jobs[1].detailsPageUrl, 'https://www.linkedin.com/jobs/view/1112223334');
   });
+  it('parses the CURRENT LinkedIn markup (slug-id href + data-entity-urn)', () => {
+    // LinkedIn now ships /jobs/view/<slug>-<id>?<tracking> and the id in data-entity-urn.
+    const current = `
+    <li>
+      <div class="base-card relative base-search-card" data-entity-urn="urn:li:jobPosting:4406118990">
+        <a class="base-card__full-link" href="https://www.linkedin.com/jobs/view/software-engineer-new-grad-at-notion-4406118990?position=1&amp;pageNum=0&amp;refId=75jwj3dTPVAU&amp;trackingId=uhm4obU9">apply</a>
+        <h3 class="base-search-card__title">Software Engineer, New Grad</h3>
+        <h4 class="base-search-card__subtitle"><a class="hidden-nested-link" href="#">Notion</a></h4>
+        <span class="job-search-card__location">San Francisco, CA</span>
+        <time class="job-search-card__listdate" datetime="2026-06-25">2 days ago</time>
+      </div>
+    </li>`;
+    const jobs = parseGuestHtml(current);
+    assert.equal(jobs.length, 1);
+    assert.equal(jobs[0].guid, 'linkedin_4406118990');           // id from data-entity-urn, not a broken /view/(\d+)
+    assert.equal(jobs[0].title, 'Software Engineer, New Grad');
+    assert.equal(jobs[0].companyName, 'Notion');
+    assert.equal(jobs[0].detailsPageUrl, 'https://www.linkedin.com/jobs/view/4406118990');
+  });
   it('returns [] for empty input', () => { assert.deepEqual(parseGuestHtml(''), []); });
 });
 
