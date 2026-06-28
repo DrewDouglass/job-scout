@@ -71,14 +71,14 @@ If you already get job-alert emails from LinkedIn, Indeed, and the like, Job Sco
 ## 4. Use it day to day
 
 - **Matches** — your scored jobs, with a location column for on-site and hybrid roles. **Mark Applied** logs it to your activity log, **Tailor** generates a tailored resume, **×** dismisses it (reversible — you can undo a dismissal).
-- **Job Search Log** — your weekly activity tracker (default **5/week** for Colorado unemployment; change it in Settings if your state differs), with **Export CSV** for your records. Keep records for 2 years in case of an audit.
+- **Job Search Log** — your weekly activity tracker (default **5/week** — check your state's unemployment requirements and adjust in Settings), with **Export CSV** for your records. Keep records for 2 years in case of an audit.
 - **Resumes** — your resume library, base and tailored.
 
 ---
 
 ## 5. Scoring (optional upgrade)
 
-The default is **free keyword scoring** — no setup, works for everyone. It gives a specific reason for each score (e.g. "senior-level title, QA/SDET role, automation/Python keywords") rather than a generic label.
+The default is **free keyword scoring** — no setup, works for everyone. It gives a specific reason for each score (e.g. "senior-level title, strong role match, remote") rather than a generic label.
 
 For smarter AI scoring, pick a provider in **⚙ Settings → AI Scoring**:
 
@@ -94,7 +94,7 @@ The **Tailor** button on any matched job generates a tailored `.docx` and `.pdf`
 **To set it up:**
 
 1. In the **Resumes** tab, paste your full resume as plain text into **Base Resume** and save.
-2. Optionally, add **Resume Preferences** — standing rules for the AI to follow every time it tailors (e.g. "Do not claim QA Lead — I was Senior Quality Engineer. Do not overstate Python ability."). These are saved in Settings and injected into every tailor prompt automatically.
+2. Optionally, add **Resume Preferences** — standing rules for the AI to follow every time it tailors (e.g. "Only claim titles I have actually held. Do not overstate familiarity with tools I've only used briefly. Emphasise team collaboration over individual contribution."). These are saved in Settings and injected into every tailor prompt automatically.
 3. Make sure you have an AI provider configured (step 5) — tailoring requires Haiku or Ollama.
 
 ---
