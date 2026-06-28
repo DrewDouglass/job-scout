@@ -93,9 +93,11 @@ function renderDashboard(db) {
   const settings = db.getSettings();
   const jobs = applyDisplayFilters(db.getActiveJobs(), settings, displayContext(db));
   const seed = buildSeedState(db);
+  const run = db.lastRun();
   const block = `<script>// PRELOADED_JOBS_START
 const PRELOADED_JOBS = ${JSON.stringify(jobs)};
 const PRELOADED_TIMESTAMP = ${JSON.stringify(new Date().toISOString())};
+const PRELOADED_RUN_NOTE = ${JSON.stringify(run ? (run.note || '') : '')};
 ${lsShimScript(seed)}
 // PRELOADED_JOBS_END`;
   html = html.replace(/<script>\/\/ PRELOADED_JOBS_START[\s\S]*?\/\/ PRELOADED_JOBS_END/, block);

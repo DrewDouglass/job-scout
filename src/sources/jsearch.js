@@ -13,7 +13,7 @@
  */
 
 const HOST = 'jsearch.p.rapidapi.com';
-const BASE = `https://${HOST}/search`;
+const BASE = `https://${HOST}/search-v2`;
 
 /** Map a JSearch publisher string to one of Adli's known source badges. */
 function normalizePublisher(s) {
@@ -45,10 +45,14 @@ function formatSalary(raw) {
   return hourly ? fmt(one) : `${fmt(one)}+`;
 }
 
-/** PURE: normalize one JSearch job object into Adli's in-memory job shape. */
-function normalizeJSearchJob(raw) {
+/** PURE: normalize one JSearch job object into Adli's in-memory job shape.
+ *  @param {object} raw        — raw JSearch job object
+ *  @param {boolean} [forceRemote] — true when the query ran with remote_jobs_only=true
+ */
+function normalizeJSearchJob(raw, { forceRemote = false } = {}) {
   if (!raw || !raw.job_id) return null;
-  const isRemote = !!raw.job_is_remote;
+  const locText = String(raw.job_location || '').toLowerCase();
+  const isRemote = !!(raw.job_is_remote || forceRemote || /remote|anywhere/i.test(locText));
   const loc = [raw.job_city, raw.job_state].filter(Boolean).join(', ')
     || (isRemote ? 'Remote' : (raw.job_country || ''));
   return {
@@ -69,20 +73,43 @@ function normalizeJSearchJob(raw) {
 }
 
 /**
- * Build the JSearch queries from settings. One query per configured search term; a
- * configured location is appended ("term in city"); remote-only when arrangement is remote.
+ * Build the JSearch queries from settings.
+ *
+ * When remote is enabled alongside other arrangements, we run two query sets:
+ *   1. Location-based queries (for local/hybrid/on-site discovery)
+ *   2. Remote-only queries (remote_jobs_only=true, no location in query)
+ *
+ * To keep request count manageable on the free tier (200/mo), remote queries are
+ * deduplicated to the first REMOTE_TERM_LIMIT distinct terms only.
  */
+const REMOTE_TERM_LIMIT = 5;
+
 function buildQueries(settings) {
   const terms = (settings.searchTerms && settings.searchTerms.length)
     ? settings.searchTerms
-    : ['software engineer']; // neutral default so a fresh install returns something
+    : ['software engineer'];
   const arr = settings.workArrangements || ['remote'];
-  const remoteOnly = arr.length === 1 && arr[0] === 'remote';
+  const wantsRemote  = arr.includes('remote');
+  const wantsLocal   = arr.includes('hybrid') || arr.includes('onsite');
   const loc = (settings.location || '').trim();
-  return terms.map(t => ({
-    query: loc ? `${t} in ${loc}` : (remoteOnly ? `${t} remote` : t),
-    remoteOnly,
-  }));
+
+  const queries = [];
+
+  // Local queries: append location when set (finds nearby hybrid + on-site roles)
+  if (wantsLocal || !wantsRemote) {
+    for (const t of terms) {
+      queries.push({ query: loc ? `${t} in ${loc}` : t, remoteOnly: false });
+    }
+  }
+
+  // Remote queries: no location, remote_jobs_only flag (capped to avoid quota burn)
+  if (wantsRemote) {
+    for (const t of terms.slice(0, REMOTE_TERM_LIMIT)) {
+      queries.push({ query: t, remoteOnly: true });
+    }
+  }
+
+  return queries;
 }
 
 /**
@@ -113,7 +140,7 @@ async function searchJSearch(settings, opts = {}) {
     const q = queries[i];
     if (opts.onStatus) opts.onStatus(`JSearch: "${q.query}" (${i + 1}/${queries.length})`);
     const params = new URLSearchParams({
-      query: q.query, page: '1', num_pages: String(numPages),
+      query: q.query,
       country: (settings.country || 'us'), date_posted: datePosted,
     });
     if (q.remoteOnly) params.set('remote_jobs_only', 'true');
@@ -122,10 +149,11 @@ async function searchJSearch(settings, opts = {}) {
       const res = await doFetch(`${BASE}?${params.toString()}`, {
         headers: { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': HOST },
       });
-      if (!res.ok) { error = `http_${res.status}`; continue; }
+      if (!res.ok) { error = res.status === 404 ? 'endpoint_not_found — check your JSearch subscription is active on rapidapi.com' : res.status === 429 ? 'rate_limited — quota exceeded for this month' : `http_${res.status}`; continue; }
       const data = await res.json();
-      for (const raw of (data.data || [])) {
-        const job = normalizeJSearchJob(raw);
+      const jobs = Array.isArray(data.data) ? data.data : (data.data && data.data.jobs) || [];
+      for (const raw of jobs) {
+        const job = normalizeJSearchJob(raw, { forceRemote: q.remoteOnly });
         if (job && !seen.has(job.guid)) { seen.add(job.guid); out.push(job); }
       }
     } catch (e) { error = String(e && e.message || e); /* keep going: one query failing != run failing */ }

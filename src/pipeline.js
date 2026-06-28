@@ -88,6 +88,7 @@ async function runDaily(db, settings, opts = {}) {
     const toScore = jobs.slice(0, opts.maxScore || 60);          // Adli caps the scored batch
     const { jobs: scored } = await scoreJobs(toScore, {
       ...opts, settings, dismissedMap: db.getDismissedMap(), provider: settings.scoreProvider,
+      anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY,
     });
     for (const j of scored) db.upsertJob(j, { runId });
     db.finishRun(runId, {

@@ -420,6 +420,18 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div><div class="spinner"></div></div>
     <div class="status-msg" id="status-msg">Starting searches…</div>
   </div>
+  <div id="jsearch-warning" style="display:none;margin-bottom:10px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:13px;color:#92400e;">
+    ⚠️ <strong>JSearch quota exceeded</strong> — only LinkedIn results are shown. Results will improve once your monthly quota resets at <a href="https://rapidapi.com/developer/billing/subscriptions-and-usage" target="_blank" style="color:#92400e;">rapidapi.com</a>.
+  </div>
+  <script>
+  (function(){
+    var note = (typeof PRELOADED_RUN_NOTE !== 'undefined') ? PRELOADED_RUN_NOTE : '';
+    if (note && note.includes('rate_limited')) {
+      var w = document.getElementById('jsearch-warning');
+      if (w) w.style.display = 'block';
+    }
+  })();
+  </script>
   <div id="matches-content" style="display:none;">
     <div class="stats-bar" id="stats-bar"></div>
     <div class="table-wrap">
@@ -427,7 +439,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <thead>
           <tr>
             <th>Score</th><th>Role</th><th>Company</th>
-            <th>Type</th><th>Salary</th><th>Posted</th><th></th>
+            <th>Type</th><th>Location</th><th>Salary</th><th>Posted</th><th></th>
           </tr>
         </thead>
         <tbody id="job-rows"></tbody>
@@ -643,7 +655,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </label>
       <div class="settings-field" style="margin:0 0 14px 26px;">
         <label>JSearch API key <span style="font-weight:400;color:#94a3b8">&mdash; free, 200 searches/month, no credit card</span></label>
-        <input id="st-rapidapi-key" class="form-input" placeholder="paste your x-rapidapi-key here" autocomplete="off" style="width:100%;box-sizing:border-box;">
+        <input id="st-rapidapi-key" class="form-input" type="password" placeholder="paste your x-rapidapi-key here" autocomplete="off" style="width:100%;box-sizing:border-box;">
         <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one: free account at <strong>rapidapi.com</strong> &rarr; open the <strong>JSearch</strong> API &rarr; Subscribe to the free <strong>Basic</strong> plan &rarr; copy the key. Full steps in <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>. No key? Turn JSearch off and use LinkedIn only.</div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer;">
@@ -675,12 +687,17 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       <h3>AI Scoring</h3>
       <div class="settings-field">
         <label>Scoring method</label>
-        <select id="st-score-provider" style="font-size:13px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;">
+        <select id="st-score-provider" style="font-size:13px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;" onchange="toggleAnthropicKeyField()">
           <option value="keyword">Keyword &mdash; free, no setup (default)</option>
           <option value="haiku">Claude Haiku &mdash; needs your Anthropic API key</option>
           <option value="ollama">Ollama &mdash; your own local AI</option>
         </select>
         <div style="font-size:11px;color:#64748b;margin-top:4px;">Keyword works for everyone with no key. Haiku/Ollama give smarter scoring &mdash; see <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>.</div>
+      </div>
+      <div id="anthropic-key-field" class="settings-field" style="display:none;">
+        <label>Anthropic API key</label>
+        <input id="st-anthropic-key" class="form-input" type="password" placeholder="sk-ant-…" autocomplete="off" style="width:100%;box-sizing:border-box;">
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#1A3A5C;">console.anthropic.com</a>. Stored locally only.</div>
       </div>
     </div>
     <div class="settings-section">
@@ -1904,7 +1921,7 @@ function renderJobRows() {
   });
   if (!visible.length) {
     document.getElementById('job-rows').innerHTML =
-      `<tr><td colspan="7" class="empty-box">No matching roles found. Check back tomorrow.</td></tr>`;
+      `<tr><td colspan="8" class="empty-box">No matching roles found. Check back tomorrow.</td></tr>`;
   } else {
     document.getElementById('job-rows').innerHTML = visible.map(j => {
       const ti    = typeInfo(j.workplaceTypes, j.isRemote);
@@ -1921,6 +1938,7 @@ function renderJobRows() {
         </td>
         <td style="color:#444;font-size:13px;">${esc(j.companyName||'')}</td>
         <td><span class="type-badge ${ti.cls}">${ti.label}</span></td>
+        <td class="date-cell">${ti.label==='Remote' ? '' : esc(j.jobLocation?.displayName||'')}</td>
         <td class="salary">${esc(j.salary||'—')}</td>
         <td class="date-cell">${formatDate(j.postedDate)}</td>
         <td class="action-cell">
@@ -2266,6 +2284,12 @@ function initAutoBackup() {
   }
 }
 
+function toggleAnthropicKeyField() {
+  const provider = document.getElementById('st-score-provider').value;
+  const field = document.getElementById('anthropic-key-field');
+  if (field) field.style.display = provider === 'haiku' ? '' : 'none';
+}
+
 function loadSettingsForm() {
   const s = getSettings();
   document.getElementById('st-name').value      = s.candidateName || '';
@@ -2296,6 +2320,8 @@ function loadSettingsForm() {
   document.getElementById('st-src-li-guest').checked  = src.linkedinGuest !== false;  // on by default
   document.getElementById('st-src-li-ride').checked   = !!src.linkedinRideAlong;      // off by default
   document.getElementById('st-score-provider').value  = s.scoreProvider || 'keyword';
+  document.getElementById('st-anthropic-key').value   = s.anthropicKey || '';
+  toggleAnthropicKeyField();
   document.getElementById('st-src-applemail').checked = !!src.appleMail;              // off by default
   document.getElementById('st-src-imap').checked      = !!src.imap;                   // off by default
   const imap = s.imap || {};
@@ -2331,6 +2357,7 @@ function saveSettingsForm() {
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
     rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
+    anthropicKey:  document.getElementById('st-anthropic-key').value.trim(),
     scoreProvider: document.getElementById('st-score-provider').value,
     sources: {
       jsearch:           document.getElementById('st-src-jsearch').checked,
