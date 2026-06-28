@@ -79,8 +79,8 @@ async function cdpReachable(port = PORT) { try { return (await fetch(`http://127
 // unreliable for headful Chrome). A different tool's Chrome uses a different profile dir, so it never
 // has our sentinel — we never silently attach to a stranger's (wrong-account) session.
 const sentinelPath = (profileDir) => path.join(profileDir, '.jobscout-cdp.json');
-function writeSentinel(profileDir, port, pid) {
-  try { fs.mkdirSync(profileDir, { recursive: true }); fs.writeFileSync(sentinelPath(profileDir), JSON.stringify({ port, pid })); } catch {}
+function writeSentinel(profileDir, port, pid, headless) {
+  try { fs.mkdirSync(profileDir, { recursive: true }); fs.writeFileSync(sentinelPath(profileDir), JSON.stringify({ port, pid, headless: !!headless })); } catch {}
 }
 /** True only if the live Chrome on `port` is the one we launched (sentinel matches AND its pid is alive). */
 function ownsCdp(port, profileDir) {
@@ -91,14 +91,38 @@ function ownsCdp(port, profileDir) {
     return true;
   } catch { return false; }
 }
+/** True if the sentinel says the running Chrome was launched headless. */
+function sentinelHeadless(profileDir) {
+  try { return JSON.parse(fs.readFileSync(sentinelPath(profileDir), 'utf8')).headless === true; } catch { return null; }
+}
+/** Kill the Chrome recorded in the sentinel (by pid). Returns true if killed. */
+function killSentinelChrome(profileDir) {
+  try {
+    const s = JSON.parse(fs.readFileSync(sentinelPath(profileDir), 'utf8'));
+    if (s.pid) { try { process.kill(s.pid, 'SIGTERM'); } catch {} }
+    fs.unlinkSync(sentinelPath(profileDir));
+    return true;
+  } catch { return false; }
+}
 
 /** Launch the dedicated Chrome (headful for login, headless for capture). Detached so it outlives this process. */
 async function launchChrome({ headless = true, port = PORT, profileDir = PROFILE_DIR, startUrl = 'https://www.linkedin.com/jobs/' } = {}) {
   if (await cdpReachable(port)) {
     // Only reuse a Chrome that is genuinely ours — never silently attach to a different debug-Chrome
     // (e.g. another LinkedIn observer), which would read the WRONG account's session.
-    if (ownsCdp(port, profileDir)) { log(`reusing job-scout's Chrome on :${port}`); return { reused: true }; }
-    throw new Error(`Port ${port} is already in use by a different Chrome (not job-scout). Close it, or set LINKEDIN_CDP_PORT to a free port and retry.`);
+    if (ownsCdp(port, profileDir)) {
+      // If we need headless but the running Chrome was launched headful (e.g. leftover login window),
+      // kill it and fall through to launch a fresh headless one so captures don't pop up a visible window.
+      if (headless && sentinelHeadless(profileDir) === false) {
+        log('reusing Chrome is headful but headless requested — restarting as headless');
+        killSentinelChrome(profileDir);
+        await sleep(1500); // give the process time to exit
+      } else {
+        log(`reusing job-scout's Chrome on :${port}`); return { reused: true };
+      }
+    } else {
+      throw new Error(`Port ${port} is already in use by a different Chrome (not job-scout). Close it, or set LINKEDIN_CDP_PORT to a free port and retry.`);
+    }
   }
   const bin = findChrome();
   if (!bin) throw new Error('Chrome/Chromium not found. Install Chrome or set CHROME_PATH.');
@@ -113,7 +137,7 @@ async function launchChrome({ headless = true, port = PORT, profileDir = PROFILE
   log(`launching ${headless ? 'headless' : 'HEADFUL'} dedicated Chrome (${bin})`);
   const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
   child.unref();
-  for (let i = 0; i < 60; i++) { if (await cdpReachable(port)) { writeSentinel(profileDir, port, child.pid); log('dedicated Chrome CDP up'); return { reused: false, pid: child.pid }; } await sleep(500); }
+  for (let i = 0; i < 60; i++) { if (await cdpReachable(port)) { writeSentinel(profileDir, port, child.pid, headless); log('dedicated Chrome CDP up'); return { reused: false, pid: child.pid }; } await sleep(500); }
   throw new Error(`Chrome did not expose CDP on :${port} within 30s`);
 }
 
@@ -216,4 +240,4 @@ After that, capture runs headless against this profile. Re-run this 'login' comm
 
 if (require.main === module) runCli(process.argv).catch(e => { log('fatal:', e.stack || e.message); process.exit(1); });
 
-module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, runCli, ownsCdp, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };
+module.exports = { launchChrome, attachPage, captureSavedSearches, sessionAlive, runCli, ownsCdp, sentinelHeadless, killSentinelChrome, PROFILE_DIR, PORT, JOB_CARDS_URL_RE };

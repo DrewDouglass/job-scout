@@ -52,9 +52,18 @@ function formatSalary(raw) {
 function normalizeJSearchJob(raw, { forceRemote = false } = {}) {
   if (!raw || !raw.job_id) return null;
   const locText = String(raw.job_location || '').toLowerCase();
-  const isRemote = !!(raw.job_is_remote || forceRemote || /remote|anywhere/i.test(locText));
-  const loc = [raw.job_city, raw.job_state].filter(Boolean).join(', ')
-    || (isRemote ? 'Remote' : (raw.job_country || ''));
+  const titleText = String(raw.job_title || '').toLowerCase();
+  const descText = String(raw.job_description || '').slice(0, 500).toLowerCase();
+
+  // Detect hybrid explicitly — JSearch's job_is_remote is unreliable for hybrid roles.
+  // A job that says "hybrid" in title/location/opening description is NOT fully remote,
+  // so forceRemote should not override that signal.
+  const isHybrid = /\bhybrid\b/.test(locText) || /\bhybrid\b/.test(titleText) || /\bhybrid\b/.test(descText);
+  const isRemote = !isHybrid && !!(raw.job_is_remote || forceRemote || /remote|anywhere/i.test(locText));
+
+  const cityState = [raw.job_city, raw.job_state].filter(Boolean).join(', ');
+  const loc = cityState || (isRemote ? 'Remote' : isHybrid ? (raw.job_country || '') : (raw.job_country || ''));
+
   return {
     guid: 'jsearch_' + raw.job_id,
     title: raw.job_title || '',
@@ -65,7 +74,7 @@ function normalizeJSearchJob(raw, { forceRemote = false } = {}) {
     salary: formatSalary(raw),
     employmentType: raw.job_employment_type || (raw.job_employment_types || [])[0] || '',
     detailsPageUrl: raw.job_apply_link || (raw.apply_options || [])[0]?.apply_link || '',
-    workplaceTypes: isRemote ? ['Remote'] : ['On-Site'],
+    workplaceTypes: isRemote ? ['Remote'] : isHybrid ? ['Hybrid'] : ['On-Site'],
     isRemote,
     source: pickSource(raw),
     summary: raw.job_description || '',

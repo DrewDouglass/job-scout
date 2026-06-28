@@ -182,18 +182,22 @@ function createServer(db) {
         if (provider === 'keyword') return sendJson(res, 200, { ok: false, error: 'needs_ai_provider' });
         const { generateJSON } = require('./scoring/ai');
         const schema = {
-          type: 'object', additionalProperties: false, required: ['summary'],
-          properties: { summary: { type: 'string' } },
+          type: 'object', additionalProperties: false, required: ['name', 'location', 'summary'],
+          properties: {
+            name:     { type: 'string' },
+            location: { type: 'string' },
+            summary:  { type: 'string' },
+          },
         };
         try {
           const result = await generateJSON({
             provider,
-            prompt: `Read this resume and write a concise 2-3 sentence professional summary covering: years of experience, key technical skills and tools, and seniority level. Write in first person, no filler phrases.\n\nRESUME:\n${baseResume.slice(0, 4000)}`,
+            prompt: `Extract three fields from this resume:\n\n- "name": the candidate's full name from the header\n- "location": city/state from the header (e.g. "Boulder, CO")\n- "summary": a comprehensive skills and background profile for AI job scoring. Write 3-5 sentences in first person covering: total years of experience, ALL specific tools/frameworks/languages/platforms mentioned ANYWHERE in the resume (read the full experience bullets, not just the top summary), seniority level, and domain expertise. Be specific and complete — list the actual technologies by name.\n\nRESUME:\n${baseResume.slice(0, 8000)}`,
             schema,
-            system: 'You extract a brief professional skills summary from a resume. Return only JSON.',
+            system: 'You extract structured data from a resume. Read the entire document including all experience bullets before writing the summary. Return only JSON.',
             opts: { anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY },
           });
-          if (result && result.summary) return sendJson(res, 200, { ok: true, summary: result.summary });
+          if (result && result.summary) return sendJson(res, 200, { ok: true, name: result.name || '', location: result.location || '', summary: result.summary });
           return sendJson(res, 200, { ok: false, error: 'no_output' });
         } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
       }

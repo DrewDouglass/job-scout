@@ -366,7 +366,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div class="modal-title" style="color:#991b1b;">Why are you dismissing this role?</div>
     <div class="modal-sub">Your feedback improves future scoring for similar roles.</div>
     <div class="dismiss-chips" id="dismiss-chips"></div>
-    <input class="dismiss-input" id="dismiss-input" placeholder="Add a note (optional)…" />
+    <input class="dismiss-input" id="dismiss-input" placeholder="Add a note (optional)…" autocomplete="off" />
     <div class="modal-actions" style="margin-top:12px;">
       <button class="btn-modal-close" onclick="cancelDismiss()">Cancel</button>
       <button class="btn-copy" style="background:#991b1b;" onclick="confirmDismiss()">Dismiss</button>
@@ -1947,7 +1947,7 @@ function renderJobRows() {
         <td><span class="score-badge ${scoreClass(j.matchScore)}">${j.matchScore}</span></td>
         <td>
           <div>
-            <a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link">${esc(j.title)}</a>
+            <a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>
             <span class="badge ${sourceBadgeClass(j.source)}">${j.source}</span>
             ${isNew ? '<span class="badge b-new">NEW</span>' : ''}
           </div>
@@ -2311,7 +2311,11 @@ async function generateProfileFromResume() {
     const data = await r.json();
     if (data.ok) {
       document.getElementById('st-profile').value = data.summary;
-      status.textContent = '✓ Done — click Save Settings to keep it.'; status.style.color = '#16a34a';
+      if (data.name)     { const el = document.getElementById('st-name');     if (el && !el.value.trim()) el.value = data.name; }
+      if (data.location) { const el = document.getElementById('st-location'); if (el && !el.value.trim()) el.value = data.location; }
+      const filled = [data.name && 'name', data.location && 'location'].filter(Boolean);
+      const note = filled.length ? ` Also filled: ${filled.join(', ')}.` : '';
+      status.textContent = '✓ Done — click Save Settings to keep it.' + note; status.style.color = '#16a34a';
     } else {
       const msg = data.error === 'needs_ai_provider' ? 'Set up Haiku or Ollama in AI Scoring below first.'
         : data.error === 'no_base_resume' ? 'Paste your resume in the Resumes tab first.'
