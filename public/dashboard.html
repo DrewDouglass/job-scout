@@ -649,7 +649,13 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </div>
       <div class="settings-row">
         <div class="settings-field"><label>Brief Skills Summary (sent to AI scorer)</label>
-          <textarea id="st-profile" rows="4" placeholder="Describe your background, key skills, years of experience..."></textarea></div>
+          <textarea id="st-profile" rows="4" placeholder="Describe your background, key skills, years of experience..."></textarea>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+            <button id="btn-gen-profile" onclick="generateProfileFromResume()" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">&#10024; Generate from Resume</button>
+            <span id="gen-profile-status" style="font-size:11px;color:#94a3b8;"></span>
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px;">Requires Haiku or Ollama in AI Scoring and a base resume saved in the Resumes tab.</div>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -703,6 +709,12 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <label>Anthropic API key</label>
         <input id="st-anthropic-key" class="form-input" type="password" placeholder="sk-ant-…" autocomplete="off" style="width:100%;box-sizing:border-box;">
         <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#1A3A5C;">console.anthropic.com</a>. Stored locally only.</div>
+      </div>
+      <div id="test-provider-row" class="settings-field" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="btn-test-provider" onclick="testAIProvider()" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">Test connection</button>
+          <span id="test-provider-status" style="font-size:11px;color:#94a3b8;"></span>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -2289,10 +2301,55 @@ function initAutoBackup() {
   }
 }
 
+async function generateProfileFromResume() {
+  const btn = document.getElementById('btn-gen-profile');
+  const status = document.getElementById('gen-profile-status');
+  btn.disabled = true; btn.textContent = '⏳ Generating…';
+  status.textContent = ''; status.style.color = '#94a3b8';
+  try {
+    const r = await fetch('/api/generate-profile', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) {
+      document.getElementById('st-profile').value = data.summary;
+      status.textContent = '✓ Done — click Save Settings to keep it.'; status.style.color = '#16a34a';
+    } else {
+      const msg = data.error === 'needs_ai_provider' ? 'Set up Haiku or Ollama in AI Scoring below first.'
+        : data.error === 'no_base_resume' ? 'Paste your resume in the Resumes tab first.'
+        : data.error;
+      status.textContent = msg; status.style.color = '#dc2626';
+    }
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#dc2626'; }
+  finally { btn.disabled = false; btn.textContent = '✨ Generate from Resume'; }
+}
+
+async function testAIProvider() {
+  const btn = document.getElementById('btn-test-provider');
+  const status = document.getElementById('test-provider-status');
+  btn.disabled = true; btn.textContent = '⏳ Testing…';
+  status.textContent = ''; status.style.color = '#94a3b8';
+  try {
+    const r = await fetch('/api/test-provider', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) { status.textContent = '✓ Connected'; status.style.color = '#16a34a'; }
+    else {
+      const msg = data.error === 'no_anthropic_key' ? 'No API key — paste one above and save.'
+        : (data.error || '').startsWith('ollama_http') ? 'Could not reach Ollama — is it running? (ollama serve)'
+        : (data.error || '').startsWith('anthropic_http') ? 'Anthropic API error — check your key.'
+        : data.error;
+      status.textContent = msg; status.style.color = '#dc2626';
+    }
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#dc2626'; }
+  finally { btn.disabled = false; btn.textContent = 'Test connection'; }
+}
+
 function toggleAnthropicKeyField() {
   const provider = document.getElementById('st-score-provider').value;
   const field = document.getElementById('anthropic-key-field');
   if (field) field.style.display = provider === 'haiku' ? '' : 'none';
+  const testRow = document.getElementById('test-provider-row');
+  if (testRow) testRow.style.display = (provider === 'haiku' || provider === 'ollama') ? '' : 'none';
+  const testStatus = document.getElementById('test-provider-status');
+  if (testStatus) testStatus.textContent = '';
 }
 
 function loadSettingsForm() {

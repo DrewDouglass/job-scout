@@ -174,6 +174,52 @@ function createServer(db) {
         }
         res.writeHead(404); return res.end('not found');
       }
+      if (p === '/api/generate-profile' && req.method === 'POST') {
+        const settings = db.getSettings();
+        const baseResume = (settings.baseResume || '').trim();
+        if (!baseResume) return sendJson(res, 200, { ok: false, error: 'no_base_resume' });
+        const provider = settings.scoreProvider || 'keyword';
+        if (provider === 'keyword') return sendJson(res, 200, { ok: false, error: 'needs_ai_provider' });
+        const { generateJSON } = require('./scoring/ai');
+        const schema = {
+          type: 'object', additionalProperties: false, required: ['summary'],
+          properties: { summary: { type: 'string' } },
+        };
+        try {
+          const result = await generateJSON({
+            provider,
+            prompt: `Read this resume and write a concise 2-3 sentence professional summary covering: years of experience, key technical skills and tools, and seniority level. Write in first person, no filler phrases.\n\nRESUME:\n${baseResume.slice(0, 4000)}`,
+            schema,
+            system: 'You extract a brief professional skills summary from a resume. Return only JSON.',
+            opts: { anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY },
+          });
+          if (result && result.summary) return sendJson(res, 200, { ok: true, summary: result.summary });
+          return sendJson(res, 200, { ok: false, error: 'no_output' });
+        } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
+      }
+
+      if (p === '/api/test-provider' && req.method === 'POST') {
+        const settings = db.getSettings();
+        const provider = settings.scoreProvider || 'keyword';
+        if (provider === 'keyword') return sendJson(res, 200, { ok: true, provider: 'keyword' });
+        const { generateJSON } = require('./scoring/ai');
+        const schema = {
+          type: 'object', additionalProperties: false, required: ['ok'],
+          properties: { ok: { type: 'boolean' } },
+        };
+        try {
+          const result = await generateJSON({
+            provider,
+            prompt: 'Reply with {"ok":true}.',
+            schema,
+            system: 'Return only JSON.',
+            opts: { anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY },
+          });
+          if (result && result.ok) return sendJson(res, 200, { ok: true, provider });
+          return sendJson(res, 200, { ok: false, error: 'unexpected_response', provider });
+        } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e), provider }); }
+      }
+
       if (p === '/api/refresh' && req.method === 'POST') {
         const { runDaily } = require('./pipeline');
         try { const r = await runDaily(db, db.getSettings(), {}); return sendJson(res, 200, { ok: true, ...r }); }
