@@ -44,7 +44,9 @@ It needs a **free** key:
 2. Go to the **[JSearch API page](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)** and click **Subscribe** → pick the free **Basic** plan (**200 requests/month, no credit card**)
 3. Copy your key (labeled `x-rapidapi-key`) and paste it into the JSearch field in Settings
 
-Each daily run uses roughly 16 requests (11 location-based + 5 remote-only queries), so the free tier covers about 12 daily runs per month. If you hit the limit, a yellow warning banner appears on the Matches tab and results fall back to LinkedIn only until your quota resets at the start of the next month.
+Each daily run uses roughly 16 requests (11 location-based queries for on-site/hybrid roles + 5 remote-only queries), so the free tier covers about 12 daily runs per month. If you hit the limit, a yellow warning banner appears on the Matches tab and results fall back to LinkedIn only until your quota resets at the start of the next month.
+
+> **Note on hybrid jobs:** JSearch and the public LinkedIn source can only distinguish remote from non-remote, so hybrid roles appear as on-site in the results. For accurate hybrid labelling, enable **LinkedIn (your account)** — it uses LinkedIn's own workplace type data.
 
 Don't want to bother? **Turn JSearch off** — you'll still get LinkedIn jobs.
 
