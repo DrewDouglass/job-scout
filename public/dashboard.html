@@ -277,6 +277,8 @@ tr:last-child td { border-bottom: none; }
 .week-export:hover { color: #1A3A5C; }
 .act-url-link { font-size: 11px; color: #1A3A5C; text-decoration: none; margin-left: 5px; opacity: 0.75; white-space: nowrap; }
 .act-url-link:hover { opacity: 1; text-decoration: underline; }
+.act-copy-url { font-size: 11px; background: none; border: none; cursor: pointer; color: #94a3b8; padding: 0 2px; margin-left: 2px; opacity: 0.7; vertical-align: middle; }
+.act-copy-url:hover { color: #1A3A5C; opacity: 1; }
 
 /* Tailor modal */
 .modal-overlay {
@@ -1160,6 +1162,22 @@ const APP_STATUSES = [
   { value: 'withdrawn',    label: 'Withdrawn',      color: '#6b7280', bg: '#f3f4f6' },
   { value: 'no_response',  label: 'No Response',    color: '#6b7280', bg: '#f0f0f0' },
 ];
+function copyActUrl(btn, url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const prev = btn.textContent;
+    btn.textContent = '✓'; btn.style.color = '#16a34a';
+    setTimeout(() => { btn.textContent = prev; btn.style.color = ''; }, 1500);
+  }).catch(() => {
+    // fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✓'; btn.style.color = '#16a34a';
+    setTimeout(() => { btn.textContent = '⎘'; btn.style.color = ''; }, 1500);
+  });
+}
+
 function statusInfo(val) {
   return APP_STATUSES.find(s => s.value === val) || APP_STATUSES[0];
 }
@@ -1464,7 +1482,7 @@ function renderActivities() {
     const rowStyle = inWeek ? '' : 'opacity:0.55;';
     const dateStr  = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     const urlLink  = a.url
-      ? `<a class="act-url-link" href="${esc(a.url)}" title="${esc(a.url)}" target="_blank">↗ listing</a>`
+      ? `<a class="act-url-link" href="${esc(a.url)}" title="${esc(a.url)}" target="_blank">↗ listing</a><button class="act-copy-url" onclick="copyActUrl(this,${JSON.stringify(a.url)})" title="Copy URL to clipboard">⎘</button>`
       : '';
     let statusCell = '<td style="font-size:11px;color:#aaa;">—</td>';
     if (a.type === 'Job Application') {
