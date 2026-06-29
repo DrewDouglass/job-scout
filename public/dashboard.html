@@ -366,7 +366,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div class="modal-title" style="color:#991b1b;">Why are you dismissing this role?</div>
     <div class="modal-sub">Your feedback improves future scoring for similar roles.</div>
     <div class="dismiss-chips" id="dismiss-chips"></div>
-    <input class="dismiss-input" id="dismiss-input" placeholder="Add a note (optional)…" />
+    <input class="dismiss-input" id="dismiss-input" placeholder="Add a note (optional)…" autocomplete="off" />
     <div class="modal-actions" style="margin-top:12px;">
       <button class="btn-modal-close" onclick="cancelDismiss()">Cancel</button>
       <button class="btn-copy" style="background:#991b1b;" onclick="confirmDismiss()">Dismiss</button>
@@ -420,6 +420,18 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div><div class="spinner"></div></div>
     <div class="status-msg" id="status-msg">Starting searches…</div>
   </div>
+  <div id="jsearch-warning" style="display:none;margin-bottom:10px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:13px;color:#92400e;">
+    ⚠️ <strong>JSearch quota exceeded</strong> — only LinkedIn results are shown. Results will improve once your monthly quota resets at <a href="https://rapidapi.com/developer/billing/subscriptions-and-usage" target="_blank" style="color:#92400e;">rapidapi.com</a>.
+  </div>
+  <script>
+  (function(){
+    var note = (typeof PRELOADED_RUN_NOTE !== 'undefined') ? PRELOADED_RUN_NOTE : '';
+    if (note && note.includes('rate_limited')) {
+      var w = document.getElementById('jsearch-warning');
+      if (w) w.style.display = 'block';
+    }
+  })();
+  </script>
   <div id="matches-content" style="display:none;">
     <div class="stats-bar" id="stats-bar"></div>
     <div class="table-wrap">
@@ -427,7 +439,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <thead>
           <tr>
             <th>Score</th><th>Role</th><th>Company</th>
-            <th>Type</th><th>Salary</th><th>Posted</th><th></th>
+            <th>Type</th><th>Location</th><th>Salary</th><th>Posted</th><th></th>
           </tr>
         </thead>
         <tbody id="job-rows"></tbody>
@@ -569,6 +581,11 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       <button onclick="saveBaseResume()" style="padding:6px 16px;background:#1A3A5C;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save Base Resume</button>
       <span id="base-resume-saved" style="display:none;color:#16a34a;font-size:12px;font-weight:600;margin-left:8px;">&#x2713; Saved</span>
     </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Resume Preferences <span style="font-weight:400;color:#94a3b8;">&mdash; standing rules for the Tailor button</span></label>
+      <div style="font-size:12px;color:#64748b;margin-bottom:6px;">Things Claude should always remember when tailoring — e.g. titles you've held, tools you actually know, anything it should never claim.</div>
+      <textarea id="st-resume-prefs" rows="4" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;" placeholder="e.g. Do not claim QA Lead title — I was Senior Quality Engineer. Do not overstate Python — solid professional level, not a software engineer. VMware/ESXi experience is real and significant."></textarea>
+    </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
     <div>
@@ -632,7 +649,13 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </div>
       <div class="settings-row">
         <div class="settings-field"><label>Brief Skills Summary (sent to AI scorer)</label>
-          <textarea id="st-profile" rows="4" placeholder="Describe your background, key skills, years of experience..."></textarea></div>
+          <textarea id="st-profile" rows="4" placeholder="Describe your background, key skills, years of experience..."></textarea>
+          <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+            <button id="btn-gen-profile" onclick="generateProfileFromResume()" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">&#10024; Generate from Resume</button>
+            <span id="gen-profile-status" style="font-size:11px;color:#94a3b8;"></span>
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px;">Requires Haiku or Ollama in AI Scoring and a base resume saved in the Resumes tab.</div>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -643,7 +666,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </label>
       <div class="settings-field" style="margin:0 0 14px 26px;">
         <label>JSearch API key <span style="font-weight:400;color:#94a3b8">&mdash; free, 200 searches/month, no credit card</span></label>
-        <input id="st-rapidapi-key" class="form-input" placeholder="paste your x-rapidapi-key here" autocomplete="off" style="width:100%;box-sizing:border-box;">
+        <input id="st-rapidapi-key" class="form-input" type="password" placeholder="paste your x-rapidapi-key here" autocomplete="off" style="width:100%;box-sizing:border-box;">
         <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one: free account at <strong>rapidapi.com</strong> &rarr; open the <strong>JSearch</strong> API &rarr; Subscribe to the free <strong>Basic</strong> plan &rarr; copy the key. Full steps in <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>. No key? Turn JSearch off and use LinkedIn only.</div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;cursor:pointer;">
@@ -675,12 +698,23 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       <h3>AI Scoring</h3>
       <div class="settings-field">
         <label>Scoring method</label>
-        <select id="st-score-provider" style="font-size:13px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;">
+        <select id="st-score-provider" style="font-size:13px;padding:6px 10px;border:1px solid #d1d5db;border-radius:6px;color:#374151;" onchange="toggleAnthropicKeyField()">
           <option value="keyword">Keyword &mdash; free, no setup (default)</option>
           <option value="haiku">Claude Haiku &mdash; needs your Anthropic API key</option>
           <option value="ollama">Ollama &mdash; your own local AI</option>
         </select>
         <div style="font-size:11px;color:#64748b;margin-top:4px;">Keyword works for everyone with no key. Haiku/Ollama give smarter scoring &mdash; see <a href="#" onclick="switchTab('setup');return false;" style="color:#1A3A5C;">Setup &amp; Help</a>.</div>
+      </div>
+      <div id="anthropic-key-field" class="settings-field" style="display:none;">
+        <label>Anthropic API key</label>
+        <input id="st-anthropic-key" class="form-input" type="password" placeholder="sk-ant-…" autocomplete="off" style="width:100%;box-sizing:border-box;">
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">Get one at <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#1A3A5C;">console.anthropic.com</a>. Stored locally only.</div>
+      </div>
+      <div id="test-provider-row" class="settings-field" style="display:none;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button id="btn-test-provider" onclick="testAIProvider()" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">Test connection</button>
+          <span id="test-provider-status" style="font-size:11px;color:#94a3b8;"></span>
+        </div>
       </div>
     </div>
     <div class="settings-section">
@@ -1904,7 +1938,7 @@ function renderJobRows() {
   });
   if (!visible.length) {
     document.getElementById('job-rows').innerHTML =
-      `<tr><td colspan="7" class="empty-box">No matching roles found. Check back tomorrow.</td></tr>`;
+      `<tr><td colspan="8" class="empty-box">No matching roles found. Check back tomorrow.</td></tr>`;
   } else {
     document.getElementById('job-rows').innerHTML = visible.map(j => {
       const ti    = typeInfo(j.workplaceTypes, j.isRemote);
@@ -1913,7 +1947,7 @@ function renderJobRows() {
         <td><span class="score-badge ${scoreClass(j.matchScore)}">${j.matchScore}</span></td>
         <td>
           <div>
-            <a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link">${esc(j.title)}</a>
+            <a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>
             <span class="badge ${sourceBadgeClass(j.source)}">${j.source}</span>
             ${isNew ? '<span class="badge b-new">NEW</span>' : ''}
           </div>
@@ -1921,6 +1955,7 @@ function renderJobRows() {
         </td>
         <td style="color:#444;font-size:13px;">${esc(j.companyName||'')}</td>
         <td><span class="type-badge ${ti.cls}">${ti.label}</span></td>
+        <td class="date-cell">${ti.label==='Remote' ? '' : esc(j.jobLocation?.displayName||'')}</td>
         <td class="salary">${esc(j.salary||'—')}</td>
         <td class="date-cell">${formatDate(j.postedDate)}</td>
         <td class="action-cell">
@@ -2266,6 +2301,61 @@ function initAutoBackup() {
   }
 }
 
+async function generateProfileFromResume() {
+  const btn = document.getElementById('btn-gen-profile');
+  const status = document.getElementById('gen-profile-status');
+  btn.disabled = true; btn.textContent = '⏳ Generating…';
+  status.textContent = ''; status.style.color = '#94a3b8';
+  try {
+    const r = await fetch('/api/generate-profile', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) {
+      document.getElementById('st-profile').value = data.summary;
+      if (data.name)     { const el = document.getElementById('st-name');     if (el && !el.value.trim()) el.value = data.name; }
+      if (data.location) { const el = document.getElementById('st-location'); if (el && !el.value.trim()) el.value = data.location; }
+      const filled = [data.name && 'name', data.location && 'location'].filter(Boolean);
+      const note = filled.length ? ` Also filled: ${filled.join(', ')}.` : '';
+      status.textContent = '✓ Done — click Save Settings to keep it.' + note; status.style.color = '#16a34a';
+    } else {
+      const msg = data.error === 'needs_ai_provider' ? 'Set up Haiku or Ollama in AI Scoring below first.'
+        : data.error === 'no_base_resume' ? 'Paste your resume in the Resumes tab first.'
+        : data.error;
+      status.textContent = msg; status.style.color = '#dc2626';
+    }
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#dc2626'; }
+  finally { btn.disabled = false; btn.textContent = '✨ Generate from Resume'; }
+}
+
+async function testAIProvider() {
+  const btn = document.getElementById('btn-test-provider');
+  const status = document.getElementById('test-provider-status');
+  btn.disabled = true; btn.textContent = '⏳ Testing…';
+  status.textContent = ''; status.style.color = '#94a3b8';
+  try {
+    const r = await fetch('/api/test-provider', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) { status.textContent = '✓ Connected'; status.style.color = '#16a34a'; }
+    else {
+      const msg = data.error === 'no_anthropic_key' ? 'No API key — paste one above and save.'
+        : (data.error || '').startsWith('ollama_http') ? 'Could not reach Ollama — is it running? (ollama serve)'
+        : (data.error || '').startsWith('anthropic_http') ? 'Anthropic API error — check your key.'
+        : data.error;
+      status.textContent = msg; status.style.color = '#dc2626';
+    }
+  } catch(e) { status.textContent = 'Error: ' + e.message; status.style.color = '#dc2626'; }
+  finally { btn.disabled = false; btn.textContent = 'Test connection'; }
+}
+
+function toggleAnthropicKeyField() {
+  const provider = document.getElementById('st-score-provider').value;
+  const field = document.getElementById('anthropic-key-field');
+  if (field) field.style.display = provider === 'haiku' ? '' : 'none';
+  const testRow = document.getElementById('test-provider-row');
+  if (testRow) testRow.style.display = (provider === 'haiku' || provider === 'ollama') ? '' : 'none';
+  const testStatus = document.getElementById('test-provider-status');
+  if (testStatus) testStatus.textContent = '';
+}
+
 function loadSettingsForm() {
   const s = getSettings();
   document.getElementById('st-name').value      = s.candidateName || '';
@@ -2296,6 +2386,9 @@ function loadSettingsForm() {
   document.getElementById('st-src-li-guest').checked  = src.linkedinGuest !== false;  // on by default
   document.getElementById('st-src-li-ride').checked   = !!src.linkedinRideAlong;      // off by default
   document.getElementById('st-score-provider').value  = s.scoreProvider || 'keyword';
+  document.getElementById('st-anthropic-key').value   = s.anthropicKey || '';
+  toggleAnthropicKeyField();
+  document.getElementById('st-resume-prefs').value    = s.skillsProfile || '';
   document.getElementById('st-src-applemail').checked = !!src.appleMail;              // off by default
   document.getElementById('st-src-imap').checked      = !!src.imap;                   // off by default
   const imap = s.imap || {};
@@ -2331,6 +2424,8 @@ function saveSettingsForm() {
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
     rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
+    anthropicKey:  document.getElementById('st-anthropic-key').value.trim(),
+    skillsProfile: document.getElementById('st-resume-prefs').value.trim(),
     scoreProvider: document.getElementById('st-score-provider').value,
     sources: {
       jsearch:           document.getElementById('st-src-jsearch').checked,

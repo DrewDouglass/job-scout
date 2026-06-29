@@ -12,7 +12,7 @@
  * provider hiccup never leaves a job unscored (Adli's posture). Zero npm deps (Node global fetch).
  */
 
-const { keywordScore } = require('./keyword');
+const { keywordScore, keywordScoreWithReason } = require('./keyword');
 
 const HAIKU_MODEL = 'claude-haiku-4-5';                 // verified id/pricing via the claude-api skill ($1/$5 per 1M)
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
@@ -140,10 +140,11 @@ async function scoreJobs(jobs, opts = {}) {
   if (!jobs || !jobs.length) return { jobs: [], provider, aiUsed: false, error: null };
 
   // keyword baseline for every job (also the fallback for any the model skips)
-  const kw = jobs.map(j => clamp(keywordScore(j, penaltyTerms)));
+  const kwResults = jobs.map(j => keywordScoreWithReason(j, penaltyTerms));
+  const kw = kwResults.map(r => clamp(r.score));
 
   if (provider === 'keyword') {
-    return { jobs: jobs.map((j, i) => ({ ...j, matchScore: kw[i], matchReason: 'keyword match' })), provider, aiUsed: false, error: null };
+    return { jobs: jobs.map((j, i) => ({ ...j, matchScore: kw[i], matchReason: kwResults[i].reason })), provider, aiUsed: false, error: null };
   }
 
   const prompt = buildScorePrompt(jobs, settings, dismissedMap);
@@ -165,7 +166,7 @@ async function scoreJobs(jobs, opts = {}) {
     return {
       ...j,
       matchScore: s ? clamp(s.score) : kw[i],          // model score (range-checked) or keyword fallback
-      matchReason: s && s.reason ? String(s.reason) : 'keyword match',
+      matchReason: s && s.reason ? String(s.reason) : kwResults[i].reason,
     };
   });
   return { jobs: out, provider, aiUsed: !!scores, error: scores ? null : (error || 'no_valid_scores') };

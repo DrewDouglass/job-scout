@@ -45,7 +45,8 @@ function parseGuestHtml(html) {
     const datetime = (block.match(/datetime="([^"]+)"/i) || [])[1] || '';
     if (!title) continue;
     seen.add(id);
-    const isRemote = /remote/i.test(location);
+    const isHybrid = /\bhybrid\b/i.test(location);
+    const isRemote = !isHybrid && /remote/i.test(location);
     jobs.push({
       guid: 'linkedin_' + id,
       title,
@@ -55,7 +56,7 @@ function parseGuestHtml(html) {
       salary: null,
       employmentType: '',
       detailsPageUrl: `https://www.linkedin.com/jobs/view/${id}`,
-      workplaceTypes: isRemote ? ['Remote'] : ['On-site'],
+      workplaceTypes: isRemote ? ['Remote'] : isHybrid ? ['Hybrid'] : ['On-site'],
       isRemote,
       source: 'LinkedIn',
       summary: '',

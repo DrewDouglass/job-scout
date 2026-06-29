@@ -41,9 +41,12 @@ In **⚙ Settings → Job Sources**:
 It needs a **free** key:
 
 1. Make a free account at **[rapidapi.com](https://rapidapi.com)**
-2. Open the **JSearch** API page (search "JSearch")
-3. Click **Subscribe** → pick the free **Basic** plan (**200 searches/month, no credit card**)
-4. Copy your key (labeled `x-rapidapi-key`) and paste it into the JSearch field in Settings
+2. Go to the **[JSearch API page](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)** and click **Subscribe** → pick the free **Basic** plan (**200 requests/month, no credit card**)
+3. Copy your key (labeled `x-rapidapi-key`) and paste it into the JSearch field in Settings
+
+Each daily run uses roughly 16 requests (11 location-based queries for on-site/hybrid roles + 5 remote-only queries), so the free tier covers about 12 daily runs per month. If you hit the limit, a yellow warning banner appears on the Matches tab and results fall back to LinkedIn only until your quota resets at the start of the next month.
+
+> **Note on hybrid jobs:** JSearch and the public LinkedIn source can only distinguish remote from non-remote, so hybrid roles appear as on-site in the results. For accurate hybrid labelling, enable **LinkedIn (your account)** — it uses LinkedIn's own workplace type data.
 
 Don't want to bother? **Turn JSearch off** — you'll still get LinkedIn jobs.
 
@@ -69,18 +72,32 @@ If you already get job-alert emails from LinkedIn, Indeed, and the like, Job Sco
 
 ## 4. Use it day to day
 
-- **Matches** — your scored jobs. **Mark Applied** logs it to your activity log, **Tailor** prepares a tailored resume, **×** dismisses it (you can undo a dismissal).
-- **Job Search Log** — your weekly activity tracker (default **5/week** for Colorado unemployment; change it in Settings if your state differs), with **Export CSV** for your records. Keep records for 2 years in case of an audit.
+- **Matches** — your scored jobs, with a location column for on-site and hybrid roles. **Mark Applied** logs it to your activity log, **Tailor** generates a tailored resume, **×** dismisses it (reversible — you can undo a dismissal).
+- **Job Search Log** — your weekly activity tracker (default **5/week** — check your state's unemployment requirements and adjust in Settings), with **Export CSV** for your records. Keep records for 2 years in case of an audit.
 - **Resumes** — your resume library, base and tailored.
 
 ---
 
 ## 5. Scoring (optional upgrade)
 
-The default is **free keyword scoring** — no setup, works for everyone. For smarter AI scoring, pick a provider in Settings:
+The default is **free keyword scoring** — no setup, works for everyone. It gives a specific reason for each score (e.g. "senior-level title, strong role match, remote") rather than a generic label.
 
-- **Claude Haiku** — uses your own Anthropic API key
-- **Ollama** — your own local AI machine
+For smarter AI scoring, pick a provider in **⚙ Settings → AI Scoring**:
+
+- **Claude Haiku** — enter your Anthropic API key directly in the Settings UI (get one at [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)). Haiku is very inexpensive — scoring 60 jobs per day costs pennies a month.
+- **Ollama** — your own local AI, free after setup. Works well on Apple Silicon Macs (M1/M2/M3) with 16 GB+ RAM. Install from [ollama.com](https://ollama.com), pull a model (`ollama pull qwen2.5:14b`), and select Ollama in Settings.
+
+---
+
+## 6. Resume tailoring
+
+The **Tailor** button on any matched job generates a tailored `.docx` and `.pdf` using your base resume as the source of truth — it never invents experience, titles, or skills.
+
+**To set it up:**
+
+1. In the **Resumes** tab, paste your full resume as plain text into **Base Resume** and save.
+2. Optionally, add **Resume Preferences** — standing rules for the AI to follow every time it tailors (e.g. "Only claim titles I have actually held. Do not overstate familiarity with tools I've only used briefly. Emphasise team collaboration over individual contribution."). These are saved in Settings and injected into every tailor prompt automatically.
+3. Make sure you have an AI provider configured (step 5) — tailoring requires Haiku or Ollama.
 
 ---
 
@@ -93,5 +110,7 @@ Everything — matches, activity log, resumes, settings — lives in one file on
 ## Trouble?
 
 - **No jobs showing?** Add your JSearch key (step 3) or connect LinkedIn, set your search terms in Settings, then click **Refresh** on the Matches tab.
+- **Only seeing LinkedIn results + a yellow banner?** Your JSearch monthly quota is used up — results resume automatically next month, or upgrade your RapidAPI plan.
 - **LinkedIn says it's disconnected?** Run `job-scout linkedin login` again.
+- **Tailor button says it needs an AI provider?** Set up Haiku or Ollama in Settings → AI Scoring (step 5).
 - **Stuck?** This guide is also in the app under **ℹ️ Setup & Help**.
