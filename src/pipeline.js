@@ -79,23 +79,38 @@ function displayContext(db) {
   };
 }
 
-/** One daily pass: gather → score → upsert to DB → record the run. */
+/**
+ * Pre-score title gate: drop jobs whose title contains none of the required terms.
+ * Empty/blank setting = pass everything through (no gate).
+ */
+function applyTitleGate(jobs, settings) {
+  const raw = settings.scoreTitleRequire || '';
+  const terms = raw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (!terms.length) return jobs;
+  return jobs.filter(j => {
+    const title = (j.title || '').toLowerCase();
+    return terms.some(t => title.includes(t));
+  });
+}
+
+/** One daily pass: gather → title-gate → score → upsert to DB → record the run. */
 async function runDaily(db, settings, opts = {}) {
   const runId = db.startRun();
   let result;
   try {
     const { jobs, counts, canary, errors } = await gather(settings, opts);
-    const toScore = jobs.slice(0, opts.maxScore || 60);          // Adli caps the scored batch
+    const gated = applyTitleGate(jobs, settings);
+    const toScore = gated.slice(0, opts.maxScore || 60);          // Adli caps the scored batch
     const { jobs: scored } = await scoreJobs(toScore, {
       ...opts, settings, dismissedMap: db.getDismissedMap(), provider: settings.scoreProvider,
       anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY,
     });
     for (const j of scored) db.upsertJob(j, { runId });
     db.finishRun(runId, {
-      sourceCounts: counts, jobCount: jobs.length, scoredCount: scored.length,
+      sourceCounts: counts, jobCount: gated.length, scoredCount: scored.length,
       status: errors.length ? 'partial' : 'ok', note: errors.join('; '),
     });
-    result = { runId, counts, canary, jobCount: jobs.length, scoredCount: scored.length, errors };
+    result = { runId, counts, canary, jobCount: gated.length, totalFetched: jobs.length, scoredCount: scored.length, errors };
   } catch (e) {
     db.finishRun(runId, { status: 'error', note: String(e && e.message || e) });
     throw e;

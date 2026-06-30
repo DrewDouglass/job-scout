@@ -11,7 +11,7 @@
 
 const format       = require('../src/lib/format');
 const filters      = require('../src/scoring/filters');
-const { keywordScore } = require('../src/scoring/keyword');
+const { keywordScore, keywordScoreWithReason, skillConfidenceWeight, skillMatchesText } = require('../src/scoring/keyword');
 const jobs         = require('../src/lib/jobs');
 const searchterms  = require('../src/lib/searchterms');
 const { parseIndeedResults } = require('../src/sources/indeed-parse');
@@ -35,6 +35,9 @@ module.exports = {
   isHybridOutsideLocalArea: filters.isHybridOutsideLocalArea,
   // src/scoring/keyword.js
   keywordScore,
+  keywordScoreWithReason,
+  skillConfidenceWeight,
+  skillMatchesText,
   // src/lib/jobs.js
   getAppliedJobKeys: jobs.getAppliedJobKeys,
   getDismissedJobKeys: jobs.getDismissedJobKeys,

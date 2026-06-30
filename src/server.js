@@ -202,6 +202,45 @@ function createServer(db) {
         } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
       }
 
+      if (p === '/api/extract-skills' && req.method === 'POST') {
+        const settings = db.getSettings();
+        const body = await readBody(req);
+        const baseResume = (body.resume || settings.baseResume || '').trim();
+        if (!baseResume) return sendJson(res, 200, { ok: false, error: 'no_base_resume' });
+        const provider = settings.scoreProvider || 'keyword';
+        if (provider === 'keyword') return sendJson(res, 200, { ok: false, error: 'needs_ai_provider' });
+        const { generateJSON } = require('./scoring/ai');
+        const schema = {
+          type: 'object', additionalProperties: false, required: ['skills'],
+          properties: {
+            skills: {
+              type: 'array',
+              items: {
+                type: 'object', additionalProperties: false, required: ['name', 'years', 'confidence'],
+                properties: {
+                  name:       { type: 'string' },
+                  years:      { type: 'integer' },
+                  confidence: { type: 'integer' },
+                },
+              },
+            },
+          },
+        };
+        try {
+          const result = await generateJSON({
+            provider,
+            prompt: `Extract skills from this resume. Return a JSON object with a "skills" array. For each skill include: name (concise, e.g. "Python/pytest", "REST API Testing", "Kubernetes"), years of experience (integer, estimate from job dates), confidence 1-5 (5=expert, daily use; 4=strong professional; 3=solid working knowledge; 2=some experience; 1=basic familiarity). Include technical tools, languages, frameworks, platforms, methodologies. Do not include soft skills.\n\nRESUME:\n${baseResume.slice(0, 8000)}`,
+            schema,
+            system: 'You extract structured skill data from a resume. Read all experience bullets carefully. Return only JSON.',
+            opts: { anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY },
+          });
+          if (result && Array.isArray(result.skills) && result.skills.length) {
+            return sendJson(res, 200, { ok: true, skills: result.skills });
+          }
+          return sendJson(res, 200, { ok: false, error: 'no_output' });
+        } catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
+      }
+
       if (p === '/api/test-provider' && req.method === 'POST') {
         const settings = db.getSettings();
         const provider = settings.scoreProvider || 'keyword';

@@ -10,8 +10,6 @@ A private, self-hosting job-search dashboard. It searches job boards and LinkedI
 - **Portable** — built-in `node:sqlite` (no native compile), runs on macOS / Windows / Linux. Requires Node 24+ (the current LTS).
 - **Real job sources** — Adli's Cowork board connectors (Dice, Indeed, ZipRecruiter via per-user MCP UUIDs) are replaced by **JSearch** (one free RapidAPI key covering Indeed/ZipRecruiter/Glassdoor & more) plus a **LinkedIn ride-along** that reads your own logged-in session, and optional email-alert readers. JSearch runs location-based queries (for on-site and hybrid), remote-only queries, or both — depending on your work arrangement preferences in Settings. A quota-warning banner appears if your monthly free limit is reached. Note: hybrid roles are only reliably identified when using the authenticated LinkedIn ride-along; JSearch and the public LinkedIn source label hybrid jobs as on-site.
 - **End-to-end** — scoring and resume tailoring run for real (no copy-paste), free on a keyword baseline or via Claude Haiku / a local Ollama model. Keyword scoring gives specific signal-based reasons (e.g. "senior-level title, strong role match") rather than a generic label. Anthropic and JSearch API keys are entered directly in the Settings UI.
-- **Reversible dismiss**, durable activity log, and a daily refresh job.
-- **Resume Preferences** — a free-text field in Settings for standing tailoring rules (titles you've held, tools you actually know, things the AI should never claim). Injected into every tailor prompt automatically.
 
 ## Quick start
 
