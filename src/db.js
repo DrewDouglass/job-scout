@@ -182,7 +182,8 @@ class JobScoutDB {
         posted_date=excluded.posted_date, salary=excluded.salary, employment_type=excluded.employment_type,
         details_url=excluded.details_url, workplace_types=excluded.workplace_types, is_remote=excluded.is_remote,
         source=excluded.source, also_seen_in=excluded.also_seen_in, summary=excluded.summary,
-        match_score=excluded.match_score, match_reason=excluded.match_reason,
+        match_score=COALESCE(excluded.match_score, match_score),
+        match_reason=COALESCE(excluded.match_reason, match_reason),
         last_seen_at=excluded.last_seen_at, run_id=excluded.run_id
     `).run({
       guid: job.guid,
@@ -230,9 +231,26 @@ class JobScoutDB {
     };
   }
 
+  /**
+   * Upsert a job that fell beyond the scoring cap — stores it with match_score=null so it
+   * can be served as PRELOADED_UNSCORED_JOBS. Skips the upsert entirely if the job already
+   * has a real score (so a cap reduction never downgrades a previously-scored job).
+   */
+  upsertJobUnscored(job, opts = {}) {
+    const existing = this.db.prepare('SELECT match_score FROM jobs WHERE guid=?').get(job.guid);
+    if (existing && existing.match_score != null) return; // already AI-scored — don't touch it
+    this.upsertJob({ ...job, matchScore: null, matchReason: null }, opts);
+  }
+
   /** Active (non-dismissed) jobs, highest score first — what the Matches tab shows. */
   getActiveJobs() {
-    return this.db.prepare('SELECT * FROM jobs WHERE dismissed_at IS NULL ORDER BY match_score DESC')
+    return this.db.prepare('SELECT * FROM jobs WHERE dismissed_at IS NULL AND match_score IS NOT NULL ORDER BY match_score DESC')
+      .all().map(JobScoutDB._rowToJob);
+  }
+
+  /** Jobs beyond the scoring cap (no AI score yet) — shown in the unscored section. */
+  getUnscoredJobs() {
+    return this.db.prepare('SELECT * FROM jobs WHERE dismissed_at IS NULL AND match_score IS NULL ORDER BY last_seen_at DESC')
       .all().map(JobScoutDB._rowToJob);
   }
   getJob(guid) { return JobScoutDB._rowToJob(this.db.prepare('SELECT * FROM jobs WHERE guid=?').get(guid)); }
