@@ -57,6 +57,7 @@ function jobDedupeKeys(job) {
   if (company && title) {
     const loc = normalizeForMatch(job.jobLocation?.displayName || '');
     keys.push('ctl:' + company + '|' + title + '|' + loc);
+    keys.push('ct:' + company + '|' + title); // location-agnostic fallback (catches same job posted Remote + "United States", or duplicate postings)
   }
   return keys;
 }

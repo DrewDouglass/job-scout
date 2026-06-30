@@ -235,6 +235,8 @@ tr:last-child td { border-bottom: none; }
   border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes row-flash { 0%,100% { background: transparent; } 30% { background: #d1fae5; } }
+.row-highlight td { animation: row-flash 2.5s ease; }
 .status-msg { font-size: 13px; color: #777; }
 
 .btn-remove {
@@ -384,6 +386,7 @@ tr:last-child td { border-bottom: none; }
 <script>// PRELOADED_JOBS_START
 // Populated by the daily scheduled task — leave empty in this template
 const PRELOADED_JOBS = [];
+const PRELOADED_UNSCORED_JOBS = [];
 const PRELOADED_TIMESTAMP = null; // Set by daily task injection
 // PRELOADED_JOBS_END
 </script>
@@ -443,7 +446,8 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
   function dismissSetupBanner(){ try{ localStorage.setItem('jd_setup_dismissed','1'); }catch(e){} var b=document.getElementById('setup-banner'); if(b) b.style.display='none'; }
   (function(){ try{ if(localStorage.getItem('jd_setup_dismissed')!=='1'){ var b=document.getElementById('setup-banner'); if(b) b.style.display='flex'; } }catch(e){} })();
   </script>
-  <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+  <div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:8px;">
+    <button id="btn-cancel-search" onclick="cancelSearch()" style="display:none;font-size:12px;padding:5px 14px;background:white;border:1px solid #fca5a5;border-radius:6px;color:#dc2626;cursor:pointer;">✕ Cancel</button>
     <button id="btn-live-search" onclick="run(true)" style="font-size:12px;padding:5px 14px;background:white;border:1px solid #94a3b8;border-radius:6px;color:#475569;cursor:pointer;">🔍 Live Search</button>
   </div>
   <div id="loading-area" class="loading">
@@ -478,6 +482,21 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div class="disclaimer" id="disclaimer"></div>
     <div style="font-size:11px;color:#aaa;margin-top:6px;padding:0 2px;" id="key-status"></div>
     <div id="pipeline-bar" style="display:none;" class="pipeline-bar"></div>
+    <div id="unscored-toggle-row" style="display:none;margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#64748b;">
+        <input type="checkbox" id="chk-show-unscored" onchange="toggleUnscoredSection(this.checked)">
+        <span id="unscored-toggle-label">Show unscored results</span>
+      </label>
+    </div>
+    <div id="unscored-section" style="display:none;margin-top:12px;">
+      <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">These jobs were fetched but not sent to AI scoring (cap reached). Scores shown are keyword estimates only. Click <strong>AI Score</strong> to get an AI score for any individual listing.</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Score</th><th>Role</th><th>Company</th><th>Type</th><th>Location</th><th>Salary</th><th>Posted</th><th></th></tr></thead>
+          <tbody id="unscored-rows"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
   <div id="matches-error"></div>
 </div>
@@ -858,6 +877,11 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated terms. Use for technologies or industries you&#x2019;d rather deprioritize. Leave blank for no penalty. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">java, selenium, playwright, appium</code></div>
         <input id="st-penalty-terms" class="form-input" placeholder="e.g. java, selenium, playwright, appium, c#" style="width:100%;box-sizing:border-box;" />
       </div>
+      <div class="settings-field" style="margin-top:12px;">
+        <label>AI Scoring Cap <span style="font-weight:400;color:#94a3b8">— max jobs sent to AI for scoring</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Jobs beyond this limit are silently dropped (not shown in results). Higher values surface more matches but increase search time — each additional 20 jobs adds roughly 10–15 seconds. Default: 60.</div>
+        <input id="st-scoring-cap" type="number" min="10" max="200" step="10" class="form-input" style="width:100px;" />
+      </div>
     </div>
     <div class="settings-section">
       <h3>Search Terms</h3>
@@ -866,17 +890,6 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
         <label>Search Terms <span style="font-weight:400;color:#94a3b8">(applied to all your job sources)</span></label>
         <textarea id="st-terms" rows="6" placeholder="senior QA engineer&#10;SDET&#10;test automation engineer&#10;quality engineer python"></textarea>
       </div>
-      <details style="margin-top:10px;">
-        <summary style="font-size:12px;color:#64748b;cursor:pointer;user-select:none;padding:4px 0;">⚙ Advanced: add extra terms per service (in addition to Search Terms above)</summary>
-        <div style="margin-top:10px;" class="settings-row">
-          <div class="settings-field"><label style="font-size:12px;">Dice extras <span style="font-weight:400;color:#94a3b8">(appends "remote" automatically)</span></label>
-            <textarea id="st-dice" rows="4" placeholder="e.g. quality engineer selenium remote"></textarea></div>
-          <div class="settings-field"><label style="font-size:12px;">Indeed extras <span style="font-weight:400;color:#94a3b8">(keyword | location format)</span></label>
-            <textarea id="st-indeed" rows="4" placeholder="e.g. quality engineer selenium | remote"></textarea></div>
-          <div class="settings-field"><label style="font-size:12px;">ZipRecruiter extras</label>
-            <textarea id="st-zr" rows="4" placeholder="e.g. quality engineer selenium"></textarea></div>
-        </div>
-      </details>
     </div>
     <div class="settings-section" style="background:#f8fafc;">
       <h3>Data Backup</h3>
@@ -1020,6 +1033,9 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
 
 <script>
 // ─── MCP tool IDs ─────────────────────────────────────────────────────────────
+const VERSION = '1.0.0'; // bumped on each GitHub release
+const RELEASES_API = 'https://api.github.com/repos/DrewDouglass/job-scout/releases/latest';
+
 // ─── ⚠️  SETUP REQUIRED: MCP Tool IDs ────────────────────────────────────────
 // These IDs are specific to your Cowork plugin installation.
 // To find yours: open a Claude conversation and ask:
@@ -1048,9 +1064,10 @@ const DEFAULT_SETTINGS = {
   autoBackupIntervalHours: 0,
   scorePenaltyTerms: [],
   scoreTitleRequire: '',
+  scoringCap: 60,
   showDismissedTab: false,
   searchTerms: null,
-  diceSearchTerms: null, indeedSearchTerms: null, zrSearchTerms: null, localMetroCities: null,
+  localMetroCities: null,
   skillsItems: [],  // [{id, name, years, confidence (1-5), source ('auto'|'manual')}]
 };
 function getSettings() {
@@ -1060,25 +1077,21 @@ function getSettings() {
 function setSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} }
 function getEffectiveDiceSearches() {
   const s=getSettings();
-  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms.map(t=>t+' remote') : DICE_SEARCHES;
-  const extra = s.diceSearchTerms&&s.diceSearchTerms.length ? s.diceSearchTerms : [];
-  return [...new Set([...base, ...extra])];
+  const wantsRemote = !s.workArrangements || s.workArrangements.includes('remote');
+  const base = s.searchTerms&&s.searchTerms.length
+    ? s.searchTerms.map(t => wantsRemote && !/\bremote\b/i.test(t) ? t + ' remote' : t)
+    : DICE_SEARCHES;
+  return [...new Set(base)];
 }
 function getEffectiveIndeedSearches() {
   const s=getSettings();
   const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms.map(t=>({q:t,loc:'remote'})) : INDEED_SEARCHES;
-  const extra = s.indeedSearchTerms&&s.indeedSearchTerms.length
-    ? s.indeedSearchTerms.map(line=>{ const [q,loc]=line.split('|').map(x=>x.trim()); return {q:q||line.trim(),loc:loc||'remote'}; })
-    : [];
-  // dedupe by q value
-  const seen=new Set(base.map(x=>x.q));
-  return [...base, ...extra.filter(x=>!seen.has(x.q))];
+  const seen=new Set(); return base.filter(x=>{ if(seen.has(x.q)) return false; seen.add(x.q); return true; });
 }
 function getEffectiveZrSearches() {
   const s=getSettings();
   const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms : ZR_SEARCHES;
-  const extra = s.zrSearchTerms&&s.zrSearchTerms.length ? s.zrSearchTerms : [];
-  return [...new Set([...base, ...extra])];
+  return [...new Set(base)];
 }
 function getEffectiveLocalAreaRe() {
   const s=getSettings();
@@ -1140,9 +1153,17 @@ const INDEED_SEARCHES = [
 
 // ─── Global state ─────────────────────────────────────────────────────────────
 let JOB_MAP = {};
+let searchAborted = false;
+function cancelSearch() {
+  searchAborted = true;
+  const btn = document.getElementById('btn-cancel-search');
+  btn.disabled = true;
+  btn.textContent = 'Cancelling…';
+}
 let CURRENT_SCORED       = [];
 let CURRENT_NEW_JOB_IDS  = new Set();
 let CURRENT_SCORING_FAIL = false;
+let UNSCORED_JOBS        = [];
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 function getCache()     { try { return JSON.parse(localStorage.getItem(CACHE_KEY)||'{}');   } catch { return {}; } }
@@ -1883,6 +1904,20 @@ Instructions:
 
 function closeModal() { document.getElementById('tailor-modal').classList.remove('open'); }
 
+// ─── Unscored wrappers (unscored jobs live in UNSCORED_JOBS, not JOB_MAP) ─────
+function markAppliedUnscored(guid) {
+  const job = UNSCORED_JOBS.find(j => j.guid === guid);
+  if (!job) return;
+  JOB_MAP[guid] = job;
+  markApplied(guid);
+}
+function tailorResumeUnscored(guid) {
+  const job = UNSCORED_JOBS.find(j => j.guid === guid);
+  if (!job) return;
+  JOB_MAP[guid] = job;
+  tailorResume(guid);
+}
+
 function copyPrompt() {
   const prompt = document.getElementById('modal-prompt').value;
   const btn    = document.getElementById('btn-copy');
@@ -2294,7 +2329,7 @@ function renderJobRows() {
     document.getElementById('job-rows').innerHTML = visible.map(j => {
       const ti    = typeInfo(j.workplaceTypes, j.isRemote);
       const isNew = CURRENT_NEW_JOB_IDS.has(j.guid);
-      return `<tr class="job-row">
+      return `<tr class="job-row" id="job-row-${esc(j.guid)}">
         <td><span class="score-badge ${scoreClass(j.matchScore)}">${j.matchScore}</span></td>
         <td>
           <div>
@@ -2323,6 +2358,92 @@ function renderJobRows() {
     }).join('');
   }
   document.getElementById('subtitle').textContent = `${visible.length} matched roles`;
+}
+
+function renderUnscoredRows() {
+  const appliedKeys   = getAppliedJobKeys();
+  const dismissedKeys = getDismissedJobKeys();
+  const visible = UNSCORED_JOBS.filter(j => {
+    if (getDismissed().has(j.guid)) return false;
+    const key = normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title);
+    if (appliedKeys.has(key) || dismissedKeys.has(key)) return false;
+    return true;
+  });
+  const tbody = document.getElementById('unscored-rows');
+  if (!tbody) return;
+  if (!visible.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-box">No additional results.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = visible.map(j => {
+    const ti = typeInfo(j.workplaceTypes, j.isRemote);
+    return `<tr class="job-row" id="unscored-row-${esc(j.guid)}" style="opacity:0.85;">
+      <td><span class="score-badge score-med" title="Keyword estimate">${j.matchScore}~</span></td>
+      <td>
+        <div><a href="${esc(j.detailsPageUrl||'#')}" class="job-title-link" target="_blank" rel="noopener noreferrer">${esc(j.title)}</a>
+          <span class="badge ${sourceBadgeClass(j.source)}">${j.source}</span></div>
+        <div class="reason" style="color:#94a3b8;">${esc(j.matchReason)}</div>
+      </td>
+      <td style="color:#444;font-size:13px;">${esc(j.companyName||'')}</td>
+      <td><span class="type-badge ${ti.cls}">${ti.label}</span></td>
+      <td class="date-cell">${ti.label==='Remote' ? '' : esc(j.jobLocation?.displayName||'')}</td>
+      <td class="salary">${esc(j.salary||'—')}</td>
+      <td class="date-cell">${formatDate(j.postedDate)}</td>
+      <td class="action-cell">
+        <button class="btn-apply" style="font-size:11px;padding:3px 7px;" data-guid="${esc(j.guid)}" onclick="markAppliedUnscored('${esc(j.guid)}')">Mark Applied</button>
+        <button class="btn-tailor" style="font-size:11px;padding:3px 7px;" data-guid="${esc(j.guid)}" onclick="tailorResumeUnscored('${esc(j.guid)}')">&#128196; Tailor</button>
+        <button class="btn-apply" style="font-size:11px;padding:3px 7px;margin-left:4px;" onclick="quickScoreJob('${esc(j.guid)}', this)">⚡ AI Score</button>
+        <button class="btn-dismiss" data-guid="${esc(j.guid)}" title="Dismiss" onclick="dismissJob('${esc(j.guid)}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleUnscoredSection(show) {
+  document.getElementById('unscored-section').style.display = show ? 'block' : 'none';
+  if (show) renderUnscoredRows();
+}
+
+async function quickScoreJob(guid, btn) {
+  const job = UNSCORED_JOBS.find(j => j.guid === guid);
+  if (!job) return;
+  btn.disabled = true;
+  btn.textContent = 'Scoring…';
+  const row = document.getElementById(`unscored-row-${guid}`);
+  try {
+    const results = await scoreJobs([job]);
+    if (results && results[0]) {
+      const s = results[0];
+      job.matchScore  = s.score;
+      job.matchReason = s.reason;
+      if (s.score >= 5) {
+        CURRENT_SCORED = [...CURRENT_SCORED, {...job, matchScore: s.score, matchReason: s.reason}]
+          .sort((a,b) => b.matchScore - a.matchScore);
+        UNSCORED_JOBS = UNSCORED_JOBS.filter(j => j.guid !== guid);
+        JOB_MAP[job.guid] = job;
+        renderJobRows();
+        renderUnscoredRows();
+        const newRow = document.getElementById(`job-row-${guid}`);
+        if (newRow) {
+          newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          newRow.classList.add('row-highlight');
+          setTimeout(() => newRow.classList.remove('row-highlight'), 2500);
+        }
+        return;
+      }
+    }
+    if (row) {
+      const scoreBadge = row.querySelector('.score-badge');
+      const reasonEl   = row.querySelector('.reason');
+      if (scoreBadge) { scoreBadge.textContent = job.matchScore; scoreBadge.title = ''; }
+      if (reasonEl)   { reasonEl.textContent = job.matchReason; reasonEl.style.color = ''; }
+      row.style.opacity = '';
+    }
+    btn.textContent = 'Scored';
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '⚡ AI Score';
+  }
 }
 
 function renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source) {
@@ -2362,13 +2483,27 @@ function renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source) {
   `;
   renderJobRows();
   renderPipeline();
+  const toggleRow = document.getElementById('unscored-toggle-row');
+  const chk = document.getElementById('chk-show-unscored');
+  if (UNSCORED_JOBS.length) {
+    document.getElementById('unscored-toggle-label').textContent = `Show ${UNSCORED_JOBS.length} unscored results (keyword estimates only)`;
+    toggleRow.style.display = 'block';
+  } else {
+    toggleRow.style.display = 'none';
+  }
+  if (chk) { chk.checked = false; }
+  document.getElementById('unscored-section').style.display = 'none';
   document.getElementById('key-status').innerHTML =
     `<span style="color:#bbb;">Searches your job sources daily · Refresh fetches the latest</span>`;
+  const _fkCfg = getSettings();
+  const _dp = _fkCfg.defensePreference || 'penalize';
   document.getElementById('disclaimer').textContent = [
     scoringFailed ? 'AI scoring unavailable — scores estimated by keyword.' : '',
     source === 'preloaded' ? 'Showing results from last scheduled task run. Reload to fetch live data.' : '',
     source === 'stale-fallback' ? 'Task data was >24h old — fetched live instead.' : '',
-    'Defense/clearance roles included but ranked lower. Verify details before applying.',
+    _dp === 'penalize' ? 'Defense/clearance roles included but ranked lower.' : '',
+    _dp === 'exclude'  ? 'Defense/clearance roles excluded.' : '',
+    'Verify details before applying.',
   ].filter(Boolean).join(' ');
   document.getElementById('loading-area').style.display = 'none';
   document.getElementById('matches-content').style.display = 'block';
@@ -2381,8 +2516,15 @@ async function run(forceSearch = false) {
   initResumes();
   refreshActBadge();
   // Reset UI for a fresh run
+  searchAborted = false;
+  UNSCORED_JOBS = [];
+  document.getElementById('matches-error').innerHTML = '';
   document.getElementById('loading-area').style.display = 'flex';
   document.getElementById('matches-content').style.display = 'none';
+  const btnCancel = document.getElementById('btn-cancel-search');
+  btnCancel.style.display = 'inline-block';
+  btnCancel.disabled = false;
+  btnCancel.textContent = '✕ Cancel';
   document.getElementById('btn-live-search').disabled = true;
   document.getElementById('btn-live-search').textContent = '⏳ Searching…';
   const cache     = getCache();
@@ -2408,34 +2550,69 @@ async function run(forceSearch = false) {
       if (preloadedDismissedKeys.has(key)) return false;
       return true;
     }).sort((a,b) => b.matchScore - a.matchScore);
+    // Populate unscored section from beyond-cap jobs injected by the server
+    const _penalties = cfg.scorePenaltyTerms || [];
+    UNSCORED_JOBS = (typeof PRELOADED_UNSCORED_JOBS !== 'undefined' ? PRELOADED_UNSCORED_JOBS : [])
+      .filter(j => !dismissed.has(j.guid))
+      .map(j => ({ ...j, matchScore: keywordScore(j, _penalties), scoredBy: 'keyword' }));
     fetchedAt = PRELOADED_TIMESTAMP;
     source    = 'preloaded';
     document.getElementById('loading-area').style.display = 'none';
     document.getElementById('matches-content').style.display = 'block';
   } else {
+    // NOTE: Live search is not implemented in this server-based fork.
+    // Searches run server-side via JSearch/LinkedIn on a scheduled basis and are
+    // injected as PRELOADED_JOBS at page render time. The Cowork MCP calls below
+    // (searchDice / searchIndeed / searchZipRecruiter) rely on window.cowork which
+    // does not exist in a regular browser — they will throw immediately.
+    // TODO: Replace this block with a fetch('/api/search') call that triggers a
+    // fresh server-side JSearch/LinkedIn run and streams results back.
+    if (typeof window.cowork === 'undefined') {
+      document.getElementById('loading-area').style.display = 'none';
+      document.getElementById('matches-content').style.display = 'block';
+      document.getElementById('matches-error').innerHTML =
+        `<div class="error-box">⚠️ <strong>Live Search isn't available in the server-based version.</strong><br>
+        Results come from the scheduled server task (JSearch + LinkedIn). To refresh, restart the server or trigger a new scheduled run.<br>
+        <span style="font-size:12px;color:#888;margin-top:4px;display:block;">See the README for how to run a manual search from the terminal.</span></div>`;
+      document.getElementById('btn-live-search').disabled = false;
+      document.getElementById('btn-live-search').textContent = '🔍 Live Search';
+      document.getElementById('btn-cancel-search').style.display = 'none';
+      return;
+    }
     source = PRELOADED_JOBS.length > 0 ? 'stale-fallback' : 'live';
     try {
       const seen = new Set(); const allJobs = [];
       const effDice=getEffectiveDiceSearches(), effIndeed=getEffectiveIndeedSearches(), effZR=getEffectiveZrSearches();
       for (let i=0; i<effDice.length; i++) {
+        if (searchAborted) throw new Error('cancelled');
         setStatus(`Dice: "${effDice[i]}" (${i+1}/${effDice.length})…`);
         for (const j of await searchDice(effDice[i]))
           if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
       }
       for (let i=0; i<effIndeed.length; i++) {
+        if (searchAborted) throw new Error('cancelled');
         const s = effIndeed[i];
         setStatus(`Indeed: "${s.q}" (${i+1}/${effIndeed.length})…`);
         for (const j of await searchIndeed(s.q, s.loc))
           if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
       }
       for (let i=0; i<effZR.length; i++) {
+        if (searchAborted) throw new Error('cancelled');
         setStatus(`ZipRecruiter: "${effZR[i]}" (${i+1}/${effZR.length})…`);
         for (const j of await searchZipRecruiter(effZR[i]))
           if (!seen.has(j.guid)) { seen.add(j.guid); allJobs.push(j); }
       }
-      setStatus(`Scoring ${allJobs.length} roles…`);
-      const toScore = allJobs.slice(0, 60);
+      if (searchAborted) throw new Error('cancelled');
+      const cap = getSettings().scoringCap || 60;
+      const toScore = allJobs.slice(0, cap);
+      UNSCORED_JOBS = allJobs.slice(cap).map(j => ({
+        ...j,
+        matchScore:  keywordScore(j, getSettings().scorePenaltyTerms || [], getSettings().skillsItems || []),
+        matchReason: 'keyword estimate — not AI scored',
+      }));
+      setStatus(`Scoring ${toScore.length} roles${UNSCORED_JOBS.length ? ` (${UNSCORED_JOBS.length} additional results not AI scored)` : ''}…`);
       const aiScores = await scoreJobs(toScore);
+      if (searchAborted) throw new Error('cancelled');
       scoringFailed = !aiScores;
       const scoreMap = {};
       if (aiScores) for (const s of aiScores) scoreMap[s.index-1] = s;
@@ -2462,10 +2639,16 @@ async function run(forceSearch = false) {
       fetchedAt = new Date().toISOString();
     } catch(err) {
       document.getElementById('loading-area').style.display = 'none';
-      document.getElementById('matches-error').innerHTML =
-        `<div class="error-box"><strong>Error:</strong> ${esc(err.message)}</div>`;
+      document.getElementById('btn-cancel-search').style.display = 'none';
       document.getElementById('btn-live-search').disabled = false;
       document.getElementById('btn-live-search').textContent = '🔍 Live Search';
+      if (err.message === 'cancelled') {
+        document.getElementById('matches-error').innerHTML =
+          `<div class="error-box" style="border-color:#fbbf24;background:#fefce8;color:#92400e;">Search cancelled.</div>`;
+      } else {
+        document.getElementById('matches-error').innerHTML =
+          `<div class="error-box"><strong>Error:</strong> ${esc(err.message)}</div>`;
+      }
       return;
     }
   }
@@ -2481,6 +2664,7 @@ async function run(forceSearch = false) {
   }
   setCache(updated);
   renderMatches(scored, newJobIds, scoringFailed, fetchedAt, source);
+  document.getElementById('btn-cancel-search').style.display = 'none';
   document.getElementById('btn-live-search').disabled = false;
   document.getElementById('btn-live-search').textContent = '🔍 Live Search';
 }
@@ -2731,15 +2915,12 @@ function loadSettingsForm() {
   document.getElementById('st-auto-backup').value = s.autoBackupIntervalHours || 0;
   document.getElementById('st-title-require').value  = s.scoreTitleRequire || '';
   document.getElementById('st-penalty-terms').value  = (s.scorePenaltyTerms || []).join(', ');
+  document.getElementById('st-scoring-cap').value    = s.scoringCap ?? 60;
   document.getElementById('st-show-dismissed').checked = !!s.showDismissedTab;
   applyDismissedTabVisibility(!!s.showDismissedTab);
   // Common search terms — derive default from DICE_SEARCHES by stripping " remote" suffix
   const defaultTerms = [...new Set(DICE_SEARCHES.map(t=>t.replace(/ remote$/i,'').trim()))].join('\n');
-  document.getElementById('st-terms').value  = s.searchTerms        ? s.searchTerms.join('\n')                    : defaultTerms;
-  // Per-service overrides — blank means "use common terms above"
-  document.getElementById('st-dice').value   = s.diceSearchTerms   ? s.diceSearchTerms.join('\n')               : '';
-  document.getElementById('st-indeed').value = s.indeedSearchTerms ? s.indeedSearchTerms.join('\n')             : '';
-  document.getElementById('st-zr').value     = s.zrSearchTerms     ? s.zrSearchTerms.join('\n')                 : '';
+  document.getElementById('st-terms').value  = s.searchTerms ? s.searchTerms.join('\n') : defaultTerms;
   const defaultMetro = LOCAL_AREA_RE.source.replace(/^\\b\(|\)\\b\/i$/g,'').split('|').filter(c=>c!=='remote').join(', ');
   document.getElementById('st-metro').value  = s.localMetroCities  ? s.localMetroCities.join(', ')               : defaultMetro;
   // Job sources + scoring (re-platform additions)
@@ -2763,9 +2944,6 @@ function saveSettingsForm() {
   const arrangements = [...document.querySelectorAll('input[name="st-arrange"]:checked')].map(cb => cb.value);
   const defenseVal   = document.querySelector('input[name="st-defense"]:checked')?.value || 'penalize';
   const commonTerms = document.getElementById('st-terms').value.split('\n').map(l=>l.trim()).filter(Boolean);
-  const diceLines   = document.getElementById('st-dice').value.split('\n').map(l=>l.trim()).filter(Boolean);
-  const indeedLines = document.getElementById('st-indeed').value.split('\n').map(l=>l.trim()).filter(Boolean);
-  const zrLines     = document.getElementById('st-zr').value.split('\n').map(l=>l.trim()).filter(Boolean);
   const metro       = document.getElementById('st-metro').value.split(',').map(c=>c.trim().toLowerCase()).filter(Boolean);
   const minSal      = parseInt(document.getElementById('st-minsalary').value) || 0;
   setSettings({
@@ -2780,14 +2958,15 @@ function saveSettingsForm() {
     defensePreference: defenseVal,
     weeklyActivityGoal: parseInt(document.getElementById('st-week-goal').value) || 5,
     autoBackupIntervalHours: parseInt(document.getElementById('st-auto-backup').value) || 0,
-    searchTerms:       commonTerms.length  ? commonTerms : null,
-    diceSearchTerms:   diceLines.length   ? diceLines   : null,
-    indeedSearchTerms: indeedLines.length ? indeedLines : null,
-    zrSearchTerms:     zrLines.length     ? zrLines     : null,
+    searchTerms:       commonTerms.length ? commonTerms : null,
+    diceSearchTerms:   null,
+    indeedSearchTerms: null,
+    zrSearchTerms:     null,
     localMetroCities:  metro.length       ? metro       : null,
     scoreTitleRequire: document.getElementById('st-title-require').value.trim(),
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+    scoringCap: Math.max(10, parseInt(document.getElementById('st-scoring-cap').value) || 60),
     showDismissedTab: document.getElementById('st-show-dismissed').checked,
     rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
     anthropicKey:  document.getElementById('st-anthropic-key').value.trim(),
@@ -2830,12 +3009,36 @@ function resetSettings() {
   setTimeout(() => { msg.style.display='none'; msg.textContent='&#x2713; Saved!'; }, 2000);
 }
 
+// ─── Update check ─────────────────────────────────────────────────────────────
+async function checkForUpdates() {
+  try {
+    const dismissed = JSON.parse(localStorage.getItem('jd_update_dismissed') || '{}');
+    const res = await fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const latest = (data.tag_name || '').replace(/^v/, '');
+    if (!latest || latest === VERSION || dismissed[latest]) return;
+    const toNum = v => v.split('.').map(Number);
+    const [la, lb, lc] = toNum(latest), [va, vb, vc] = toNum(VERSION);
+    const isNewer = la > va || (la === va && lb > vb) || (la === va && lb === vb && lc > vc);
+    if (!isNewer) return;
+    const banner = document.createElement('div');
+    banner.id = 'update-banner';
+    banner.style.cssText = 'background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;font-size:13px;color:#1e40af;';
+    banner.innerHTML = `<span>🆕 <strong>Update available</strong> — v${latest} is out (you have v${VERSION}). <a href="${data.html_url}" target="_blank" style="color:#1d4ed8;">See what's new ↗</a></span>`
+      + `<button onclick="document.getElementById('update-banner').remove();const d=JSON.parse(localStorage.getItem('jd_update_dismissed')||'{}');d['${latest}']=1;localStorage.setItem('jd_update_dismissed',JSON.stringify(d));" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:16px;color:#6b7280;line-height:1;">×</button>`;
+    const matchesTab = document.getElementById('tab-matches');
+    if (matchesTab) matchesTab.prepend(banner);
+  } catch(e) { /* silent — update check is best-effort */ }
+}
+
 // run() is called here (end of script) so that const INITIAL_RESUMES is
 // fully defined before run() → initResumes() tries to reference it.
 updateActFormFields();
 applyDismissedTabVisibility(!!getSettings().showDismissedTab);
 run();
 initAutoBackup();
+checkForUpdates();
 </script>
 
 <script>

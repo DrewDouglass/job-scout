@@ -100,12 +100,15 @@ async function runDaily(db, settings, opts = {}) {
   try {
     const { jobs, counts, canary, errors } = await gather(settings, opts);
     const gated = applyTitleGate(jobs, settings);
-    const toScore = gated.slice(0, opts.maxScore || 60);          // Adli caps the scored batch
+    const cap = opts.maxScore || settings.scoringCap || 60;
+    const toScore = gated.slice(0, cap);                           // Adli caps the scored batch
+    const unscoredRemainder = gated.slice(cap);                   // beyond-cap: stored with null score
     const { jobs: scored } = await scoreJobs(toScore, {
       ...opts, settings, dismissedMap: db.getDismissedMap(), provider: settings.scoreProvider,
       anthropicKey: settings.anthropicKey || process.env.ANTHROPIC_API_KEY,
     });
     for (const j of scored) db.upsertJob(j, { runId });
+    for (const j of unscoredRemainder) db.upsertJobUnscored(j, { runId });
     db.finishRun(runId, {
       sourceCounts: counts, jobCount: gated.length, scoredCount: scored.length,
       status: errors.length ? 'partial' : 'ok', note: errors.join('; '),
