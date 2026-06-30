@@ -39,6 +39,9 @@ const {
   getEffectiveZrSearches,
   getEffectiveLocalAreaRe,
   parseIndeedResults,
+  keywordScoreWithReason,
+  skillConfidenceWeight,
+  skillMatchesText,
 } = require('./utils');
 
 // ─── normalizeForMatch ────────────────────────────────────────────────────────
@@ -367,6 +370,91 @@ describe('keywordScore', () => {
   it('no penalty terms passed: no penalty applied (default behaviour for fresh installs)', () => {
     const job = { title: 'Senior QA', summary: 'playwright selenium java automation', companyName: 'Acme', isRemote: true };
     assert.equal(keywordScore(job), keywordScore(job, []));
+  });
+});
+
+// ─── skillConfidenceWeight ────────────────────────────────────────────────────
+
+describe('skillConfidenceWeight', () => {
+  it('confidence 5 → 2', () => assert.equal(skillConfidenceWeight(5), 2));
+  it('confidence 4 → 2', () => assert.equal(skillConfidenceWeight(4), 2));
+  it('confidence 3 → 1', () => assert.equal(skillConfidenceWeight(3), 1));
+  it('confidence 2 → 0', () => assert.equal(skillConfidenceWeight(2), 0));
+  it('confidence 1 → 0', () => assert.equal(skillConfidenceWeight(1), 0));
+});
+
+// ─── skillMatchesText ─────────────────────────────────────────────────────────
+
+describe('skillMatchesText', () => {
+  it('simple name matches whole word', () => assert.ok(skillMatchesText('Python', 'requires python testing')));
+  it('slash-separated: either part matches', () => assert.ok(skillMatchesText('Python/pytest', 'senior pytest automation engineer')));
+  it('multi-word split: partial match works', () => assert.ok(skillMatchesText('GitHub Actions', 'uses github actions for CI')));
+  it('no match when word absent', () => assert.ok(!skillMatchesText('Selenium', 'python pytest api automation')));
+  it('word boundary: "java" in skill does not match "javascript" in text', () => assert.ok(!skillMatchesText('Java', 'javascript frontend developer')));
+  it('short parts (<= 2 chars) are ignored', () => assert.ok(skillMatchesText('Go', 'golang developer', ) === false)); // "go" is 2 chars, filtered
+});
+
+// ─── keywordScore with skillsItems ────────────────────────────────────────────
+
+describe('keywordScore — skills weighting', () => {
+  const baseJob = { title: 'Senior QA Engineer', summary: 'requires pytest and python automation', companyName: 'Acme', isRemote: true };
+
+  it('high-confidence skill matching job text boosts score', () => {
+    const skills = [{ id: '1', name: 'pytest', years: 4, confidence: 5, source: 'auto' }];
+    assert.ok(keywordScore(baseJob, [], skills) > keywordScore(baseJob, [], []));
+  });
+
+  it('boost capped at +2 regardless of how many skills match', () => {
+    const skills = [
+      { id: '1', name: 'pytest',     years: 4, confidence: 5, source: 'auto' },
+      { id: '2', name: 'python',     years: 4, confidence: 5, source: 'auto' },
+      { id: '3', name: 'automation', years: 4, confidence: 5, source: 'auto' },
+    ];
+    const withSkills    = keywordScore(baseJob, [], skills);
+    const withoutSkills = keywordScore(baseJob, [], []);
+    assert.ok(withSkills - withoutSkills <= 2, 'boost should not exceed 2');
+  });
+
+  it('low-confidence skill (confidence < 4) does not boost score', () => {
+    const skills = [{ id: '1', name: 'pytest', years: 4, confidence: 3, source: 'auto' }];
+    assert.equal(keywordScore(baseJob, [], skills), keywordScore(baseJob, [], []));
+  });
+
+  it('skill not found in job text does not boost score', () => {
+    const skills = [{ id: '1', name: 'Kubernetes', years: 4, confidence: 5, source: 'auto' }];
+    assert.equal(keywordScore(baseJob, [], skills), keywordScore(baseJob, [], []));
+  });
+
+  it('score never exceeds 10 with skills boost', () => {
+    const job = { title: 'Senior SDET pytest automation python remote', summary: 'pytest python api test automation', companyName: 'Acme', isRemote: true };
+    const skills = [
+      { id: '1', name: 'pytest', years: 4, confidence: 5, source: 'auto' },
+      { id: '2', name: 'python', years: 4, confidence: 5, source: 'auto' },
+    ];
+    assert.ok(keywordScore(job, [], skills) <= 10);
+  });
+
+  it('years underqualification skips boost for that skill', () => {
+    const job = { title: 'Senior QA', summary: '5+ years pytest automation required', companyName: 'Acme', isRemote: true };
+    const skillsUnder  = [{ id: '1', name: 'pytest', years: 2, confidence: 5, source: 'auto' }];
+    const skillsMeets  = [{ id: '1', name: 'pytest', years: 5, confidence: 5, source: 'auto' }];
+    assert.ok(keywordScore(job, [], skillsMeets) >= keywordScore(job, [], skillsUnder));
+  });
+
+  it('slash-separated skill name: either part triggers boost', () => {
+    const job = { title: 'Senior QA', summary: 'requires pytest automation framework', companyName: 'Acme', isRemote: true };
+    const skills = [{ id: '1', name: 'Python/pytest', years: 4, confidence: 5, source: 'auto' }];
+    assert.ok(keywordScore(job, [], skills) > keywordScore(job, [], []));
+  });
+
+  it('passing undefined skillsItems falls back gracefully (no boost)', () => {
+    assert.equal(keywordScore(baseJob, [], undefined), keywordScore(baseJob, [], []));
+  });
+
+  it('keywordScoreWithReason includes skill name in reason string when boosted', () => {
+    const skills = [{ id: '1', name: 'pytest', years: 4, confidence: 5, source: 'auto' }];
+    const { reason } = keywordScoreWithReason(baseJob, [], skills);
+    assert.ok(reason.toLowerCase().includes('pytest'), `expected "pytest" in reason, got: "${reason}"`);
   });
 });
 

@@ -238,8 +238,8 @@ class JobScoutDB {
   getJob(guid) { return JobScoutDB._rowToJob(this.db.prepare('SELECT * FROM jobs WHERE guid=?').get(guid)); }
   getDismissedMap() {
     const map = {};
-    for (const r of this.db.prepare('SELECT guid,dismiss_reason,dismissed_at,company_name,title FROM jobs WHERE dismissed_at IS NOT NULL').all())
-      map[r.guid] = { reason: r.dismiss_reason || '', dismissedAt: r.dismissed_at, companyName: r.company_name || '', title: r.title || '' };
+    for (const r of this.db.prepare('SELECT guid,dismiss_reason,dismissed_at,company_name,title,details_url,source FROM jobs WHERE dismissed_at IS NOT NULL').all())
+      map[r.guid] = { reason: r.dismiss_reason || '', dismissedAt: r.dismissed_at, companyName: r.company_name || '', title: r.title || '', detailsPageUrl: r.details_url || '', source: r.source || '' };
     return map;
   }
 

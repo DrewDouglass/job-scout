@@ -55,16 +55,21 @@ function buildScorePrompt(jobs, settings = {}, dismissedMap = {}) {
   const penaltyTerms = settings.scorePenaltyTerms || [];
   const penaltyLine = penaltyTerms.length
     ? `\n- Job primarily requires ${penaltyTerms.join(', ')} (not in candidate's stack) = subtract 1` : '';
+  const skills = (settings.skillsItems || []).filter(sk => sk.confidence >= 3).sort((a, b) => b.confidence - a.confidence);
+  const skillsLine = skills.length
+    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years || '?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
+    : '';
   const list = jobs.map((j, i) =>
     `[${i + 1}] "${j.title}" at ${j.companyName} | ${(j.workplaceTypes || []).join('/') || 'unknown'} | Salary: ${j.salary || 'not listed'} | Source: ${j.source}\nSummary: ${(j.summary || '').slice(0, 200)}`
   ).join('\n\n');
   return `Score these ${jobs.length} job listings for this candidate:
-${profile}${dismissalContext(dismissedMap)}
+${profile}${dismissalContext(dismissedMap)}${skillsLine}
 
-SCORING: 9-10=excellent match for the candidate's stack/seniority, remote/hybrid. 7-8=good fit. 5-6=partial. 1-4=poor.
+SCORING: 9-10=excellent technical match for candidate's stack, remote/hybrid. 7-8=good fit. 5-6=partial. 1-4=poor.
 ADJUSTMENTS:
 - Security clearance OR defense/military/homeland = subtract 2 (min 1)
 - Hybrid role outside ${metro} = score 0 (auto-exclude)${penaltyLine}
+- Do NOT penalise mid-level or non-senior titles (e.g. "Engineer II") — seniority alone is not a negative signal.
 
 JOBS:
 ${list}

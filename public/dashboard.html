@@ -101,6 +101,32 @@ tr:last-child td { border-bottom: none; }
 .btn-rrestore:hover { background:#dcfce7; }
 .btn-rdelete        { font-size:12px; padding:3px 6px;  border:1px solid #fca5a5; border-radius:5px; cursor:pointer; background:white; color:#dc2626; }
 .btn-rdelete:hover  { background:#fef2f2; }
+/* ── Skills tab ──────────────────────────────────────────── */
+.skills-table { width:100%; border-collapse:collapse; font-size:13px; }
+.skills-table th { background:#f8fafc; color:#64748b; font-weight:600; padding:8px 12px; text-align:left; border-bottom:1px solid #e2e8f0; white-space:nowrap; }
+.skills-table td { padding:6px 10px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+.skills-table tr:hover td { background:#f8fafc; }
+.skills-table th.sortable { cursor:pointer; user-select:none; }
+.skills-table th.sortable:hover { color:#1A3A5C; }
+.sort-arrow { margin-left:4px; opacity:.4; font-size:11px; }
+.sort-arrow.active { opacity:1; color:#1A3A5C; }
+.skill-name-input { border:none; background:transparent; font-size:13px; width:100%; min-width:120px; padding:2px 4px; border-radius:4px; color:#1e293b; }
+.skill-name-input:focus { outline:1px solid #93c5fd; background:white; }
+.skill-yr-input { border:1px solid #e2e8f0; background:white; font-size:13px; width:52px; padding:3px 6px; border-radius:4px; text-align:center; }
+.skill-yr-input:focus { outline:1px solid #93c5fd; }
+.conf-cell { display:flex; align-items:center; gap:8px; }
+.conf-cell input[type=range] { width:90px; accent-color:#1A3A5C; cursor:pointer; }
+.conf-val { font-size:12px; font-weight:600; min-width:12px; color:#1A3A5C; }
+.weight-badge { font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; display:inline-block; }
+.weight-2 { background:#dcfce7; color:#166534; }
+.weight-1 { background:#fef9c3; color:#854d0e; }
+.weight-0 { background:#f1f5f9; color:#94a3b8; }
+.src-badge { font-size:11px; padding:2px 8px; border-radius:10px; font-weight:500; }
+.src-auto   { background:#e0f2fe; color:#0369a1; }
+.src-manual { background:#ede9fe; color:#6d28d9; }
+.btn-del-skill { font-size:12px; padding:2px 7px; border:1px solid #fca5a5; border-radius:5px; cursor:pointer; background:white; color:#dc2626; line-height:1.4; }
+.btn-del-skill:hover { background:#fef2f2; }
+.skills-import-status { font-size:12px; margin-top:10px; min-height:16px; }
 /* ── Settings tab ─────────────────────────────────────────── */
 .settings-wrap    { max-width:720px; }
 .settings-section { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:20px 24px; margin-bottom:16px; }
@@ -277,6 +303,8 @@ tr:last-child td { border-bottom: none; }
 .week-export:hover { color: #1A3A5C; }
 .act-url-link { font-size: 11px; color: #1A3A5C; text-decoration: none; margin-left: 5px; opacity: 0.75; white-space: nowrap; }
 .act-url-link:hover { opacity: 1; text-decoration: underline; }
+.act-copy-url { font-size: 11px; background: none; border: none; cursor: pointer; color: #94a3b8; padding: 0 2px; margin-left: 2px; opacity: 0.7; vertical-align: middle; }
+.act-copy-url:hover { color: #1A3A5C; opacity: 1; }
 
 /* Tailor modal */
 .modal-overlay {
@@ -398,7 +426,9 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
 <div class="tabs">
   <div class="tab active" onclick="switchTab('matches')" data-tab="matches">Matches</div>
   <div class="tab" onclick="switchTab('activities')" data-tab="activities" id="act-tab-label">Job Search Log</div>
+  <div class="tab" onclick="switchTab('dismissed')" data-tab="dismissed" id="dismissed-tab-label">Dismissed</div>
   <div class="tab" onclick="switchTab('resumes')" data-tab="resumes">Resumes</div>
+  <div class="tab" onclick="switchTab('skills')" data-tab="skills">Skills</div>
   <div class="tab" onclick="switchTab('settings')" data-tab="settings">⚙ Settings</div>
   <div class="tab" onclick="switchTab('setup')" data-tab="setup">ℹ️ Setup &amp; Help</div>
 </div>
@@ -578,7 +608,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div style="font-size:12px;color:#64748b;margin-bottom:8px;">Paste your full resume as plain text. The <strong>Tailor</strong> button on any job rewrites this for that role &mdash; truthfully, it never invents experience &mdash; and saves a <strong>.docx + .pdf</strong> you can download. (Tailoring uses your AI provider; set one in <a href="#" onclick="switchTab('settings');return false;" style="color:#1A3A5C;">Settings &rarr; AI Scoring</a>.)</div>
     <textarea id="st-base-resume" rows="8" style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;" placeholder="Paste your resume text here — name, contact, summary, experience, skills…"></textarea>
     <div style="margin-top:8px;">
-      <button onclick="saveBaseResume()" style="padding:6px 16px;background:#1A3A5C;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save Base Resume</button>
+      <button onclick="saveBaseResume()" style="padding:6px 16px;background:#1A3A5C;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">Save</button>
       <span id="base-resume-saved" style="display:none;color:#16a34a;font-size:12px;font-weight:600;margin-left:8px;">&#x2713; Saved</span>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;">
@@ -598,7 +628,7 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <h4>Add Resume or Cover Letter</h4>
     <div class="rf-row">
       <input id="rf-file" placeholder="File name (e.g. YourName_resume_Acme.docx)" style="flex:2;">
-      <select id="rf-type">
+      <select id="rf-type" onchange="updateResumeFormType()">
         <option value="tailored">Tailored Resume</option>
         <option value="base">Base Resume</option>
         <option value="cover">Cover Letter</option>
@@ -634,6 +664,57 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     </table>
   </div>
   <div style="font-size:11px;color:#bbb;margin-top:12px;">When Claude tailors a new resume, it will be added here. Archive once you&#x2019;ve submitted the application.</div>
+</div>
+
+<div id="tab-skills" class="tab-panel">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div style="font-weight:700;color:#1A3A5C;font-size:15px;">Skills profile</div>
+      <div style="font-size:12px;color:#64748b;margin-top:3px;">Weights job scoring and guides resume tailoring. Higher confidence = higher score boost when a job matches that skill.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <button id="btn-import-skills" onclick="importSkillsFromResume(this)" style="font-size:12px;padding:5px 12px;background:white;border:1px solid #94a3b8;border-radius:5px;color:#475569;cursor:pointer;">⬇ Import from resume</button>
+      <button onclick="addSkill()" style="font-size:12px;padding:5px 12px;background:#1A3A5C;border:1px solid #1A3A5C;border-radius:5px;color:white;cursor:pointer;">+ Add skill</button>
+    </div>
+  </div>
+  <div id="skills-import-status" class="skills-import-status"></div>
+  <div class="table-wrap">
+    <table class="skills-table" id="skills-table">
+      <thead>
+        <tr>
+          <th class="sortable" onclick="sortSkills('name')">Skill <span class="sort-arrow" id="sk-sort-name">↕</span></th>
+          <th class="sortable" onclick="sortSkills('years')" style="width:80px;">Years <span class="sort-arrow" id="sk-sort-years">↕</span></th>
+          <th class="sortable" onclick="sortSkills('confidence')" style="width:180px;">Confidence <span class="sort-arrow" id="sk-sort-confidence">↕</span></th>
+          <th style="width:100px;">Score weight</th>
+          <th style="width:80px;">Source</th>
+          <th style="width:40px;"></th>
+        </tr>
+      </thead>
+      <tbody id="skills-tbody"></tbody>
+    </table>
+  </div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:10px;">Confidence 4–5 = +2 boost · Confidence 3 = +1 boost · Confidence 1–2 = no boost. Years are used by AI scoring to check "X+ years required" claims.</div>
+</div>
+
+<div id="tab-dismissed" class="tab-panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div style="font-weight:700;color:#1A3A5C;font-size:15px;">Dismissed Jobs</div>
+    <button class="btn-copy" style="background:#991b1b;font-size:12px;" onclick="clearAllDismissed()">Clear All</button>
+  </div>
+  <div id="dismissed-empty" style="color:#94a3b8;font-size:13px;display:none;">No dismissed jobs. When you dismiss a job from the Matches tab it will appear here.</div>
+  <table id="dismissed-table" style="width:100%;border-collapse:collapse;font-size:13px;display:none;">
+    <thead>
+      <tr style="border-bottom:2px solid #e2e8f0;text-align:left;">
+        <th style="padding:8px 10px;color:#64748b;font-weight:600;">Job</th>
+        <th style="padding:8px 10px;color:#64748b;font-weight:600;">Company</th>
+        <th style="padding:8px 10px;color:#64748b;font-weight:600;">Reason</th>
+        <th style="padding:8px 10px;color:#64748b;font-weight:600;">Dismissed</th>
+        <th style="padding:8px 10px;"></th>
+      </tr>
+    </thead>
+    <tbody id="dismissed-rows"></tbody>
+  </table>
+  <div style="font-size:11px;color:#94a3b8;margin-top:14px;">Un-dismissing a job removes it from the scoring context and makes it eligible to reappear in Matches on the next search run.</div>
 </div>
 
 <div id="tab-settings" class="tab-panel">
@@ -759,8 +840,20 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       </div>
     </div>
     <div class="settings-section">
+      <h3>Display</h3>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+        <input type="checkbox" id="st-show-dismissed"> Show Dismissed tab
+        <span style="font-weight:400;color:#94a3b8;font-size:12px;">— lets you view and restore dismissed jobs</span>
+      </label>
+    </div>
+    <div class="settings-section">
       <h3>Scoring</h3>
       <div class="settings-field">
+        <label>Title Must Contain <span style="font-weight:400;color:#94a3b8">— pre-score gate: drop jobs whose title matches none of these</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated keywords. Jobs whose title contains none of them are dropped before scoring, saving AI credits and cutting noise. Leave blank to score everything. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">qa, quality, sdet, test, automation</code></div>
+        <input id="st-title-require" class="form-input" placeholder="e.g. qa, quality, sdet, test, automation" style="width:100%;box-sizing:border-box;" />
+      </div>
+      <div class="settings-field" style="margin-top:12px;">
         <label>Score Penalty Keywords <span style="font-weight:400;color:#94a3b8">— jobs mentioning these get a &minus;1 score</span></label>
         <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated terms. Use for technologies or industries you&#x2019;d rather deprioritize. Leave blank for no penalty. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">java, selenium, playwright, appium</code></div>
         <input id="st-penalty-terms" class="form-input" placeholder="e.g. java, selenium, playwright, appium, c#" style="width:100%;box-sizing:border-box;" />
@@ -954,8 +1047,11 @@ const DEFAULT_SETTINGS = {
   weeklyActivityGoal: 5,
   autoBackupIntervalHours: 0,
   scorePenaltyTerms: [],
+  scoreTitleRequire: '',
+  showDismissedTab: false,
   searchTerms: null,
   diceSearchTerms: null, indeedSearchTerms: null, zrSearchTerms: null, localMetroCities: null,
+  skillsItems: [],  // [{id, name, years, confidence (1-5), source ('auto'|'manual')}]
 };
 function getSettings() {
   try { const s = JSON.parse(localStorage.getItem(SETTINGS_KEY)); return s ? {...DEFAULT_SETTINGS,...s} : {...DEFAULT_SETTINGS}; }
@@ -1148,6 +1244,8 @@ function switchTab(name) {
   if (name === 'resumes')    renderResumes();
   if (name === 'settings')   loadSettingsForm();
   if (name === 'matches')    renderPipeline();
+  if (name === 'skills')     renderSkillsTable();
+  if (name === 'dismissed')  renderDismissed();
 }
 
 // ─── Application status config ───────────────────────────────────────────────
@@ -1160,6 +1258,22 @@ const APP_STATUSES = [
   { value: 'withdrawn',    label: 'Withdrawn',      color: '#6b7280', bg: '#f3f4f6' },
   { value: 'no_response',  label: 'No Response',    color: '#6b7280', bg: '#f0f0f0' },
 ];
+function copyActUrl(btn, url) {
+  navigator.clipboard.writeText(url).then(() => {
+    const prev = btn.textContent;
+    btn.textContent = '✓'; btn.style.color = '#16a34a';
+    setTimeout(() => { btn.textContent = prev; btn.style.color = ''; }, 1500);
+  }).catch(() => {
+    // fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    btn.textContent = '✓'; btn.style.color = '#16a34a';
+    setTimeout(() => { btn.textContent = '⎘'; btn.style.color = ''; }, 1500);
+  });
+}
+
 function statusInfo(val) {
   return APP_STATUSES.find(s => s.value === val) || APP_STATUSES[0];
 }
@@ -1464,7 +1578,7 @@ function renderActivities() {
     const rowStyle = inWeek ? '' : 'opacity:0.55;';
     const dateStr  = new Date(a.date + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     const urlLink  = a.url
-      ? `<a class="act-url-link" href="${esc(a.url)}" title="${esc(a.url)}" target="_blank">↗ listing</a>`
+      ? `<a class="act-url-link" href="${esc(a.url)}" title="${esc(a.url)}" target="_blank">↗ listing</a><button class="act-copy-url" onclick="copyActUrl(this,${JSON.stringify(a.url)})" title="Copy URL to clipboard">⎘</button>`
       : '';
     let statusCell = '<td style="font-size:11px;color:#aaa;">—</td>';
     if (a.type === 'Job Application') {
@@ -1664,6 +1778,70 @@ function getDismissalContext() {
   return `\n\nUser feedback from previously dismissed roles (downweight similar jobs):\n${lines}`;
 }
 
+// ─── Tab visibility ───────────────────────────────────────────────────────────
+function applyDismissedTabVisibility(show) {
+  const tabEl   = document.querySelector('.tab[data-tab="dismissed"]');
+  const panelEl = document.getElementById('tab-dismissed');
+  if (!tabEl) return;
+  tabEl.style.display = show ? '' : 'none';
+  if (!show && panelEl && panelEl.classList.contains('active')) switchTab('matches');
+}
+
+// ─── Dismissed jobs tab ───────────────────────────────────────────────────────
+function renderDismissed() {
+  const map = getDismissedMap();
+  const entries = Object.entries(map).sort((a, b) => (b[1].dismissedAt || 0) - (a[1].dismissedAt || 0));
+  const emptyEl = document.getElementById('dismissed-empty');
+  const tableEl = document.getElementById('dismissed-table');
+  const tbody   = document.getElementById('dismissed-rows');
+  if (!entries.length) {
+    emptyEl.style.display = '';
+    tableEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  tableEl.style.display = '';
+  tbody.innerHTML = entries.map(([guid, d]) => {
+    const date = d.dismissedAt ? new Date(d.dismissedAt).toLocaleDateString() : '—';
+    const reason = d.reason ? `<span style="background:#fef2f2;color:#991b1b;border-radius:4px;padding:2px 6px;font-size:11px;">${esc(d.reason)}</span>` : '<span style="color:#94a3b8;font-size:11px;">—</span>';
+    const titleCell = d.detailsPageUrl
+      ? `<a href="${esc(d.detailsPageUrl)}" target="_blank" style="color:#1A3A5C;font-weight:600;text-decoration:none;" title="${esc(d.detailsPageUrl)}">${esc(d.title || guid)}</a>`
+      : `<span style="font-weight:600;">${esc(d.title || guid)}</span>`;
+    const sourceTag = d.source ? `<span style="font-size:10px;color:#94a3b8;margin-left:6px;">${esc(d.source)}</span>` : '';
+    return `<tr style="border-bottom:1px solid #f1f5f9;">
+      <td style="padding:8px 10px;">${titleCell}${sourceTag}</td>
+      <td style="padding:8px 10px;color:#475569;">${esc(d.companyName || '—')}</td>
+      <td style="padding:8px 10px;">${reason}</td>
+      <td style="padding:8px 10px;color:#94a3b8;white-space:nowrap;">${date}</td>
+      <td style="padding:8px 10px;text-align:right;">
+        <button class="btn-copy" style="font-size:11px;padding:3px 10px;" onclick="undismissJob('${guid}')">Restore</button>
+      </td>
+    </tr>`;
+  }).join('');
+  const label = document.getElementById('dismissed-tab-label');
+  if (label) label.textContent = `Dismissed (${entries.length})`;
+}
+
+async function undismissJob(guid) {
+  try {
+    await fetch('/api/undismiss', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ guid }) });
+  } catch {}
+  // optimistic update of local cache
+  const map = getDismissedMap();
+  delete map[guid];
+  localStorage.setItem('jd_dismissed', JSON.stringify(map));
+  renderDismissed();
+}
+
+async function clearAllDismissed() {
+  if (!confirm('Clear all dismissed jobs? This removes them from the scoring context and they may reappear in Matches.')) return;
+  try {
+    await fetch('/api/dismissed/replace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ map: {} }) });
+  } catch {}
+  localStorage.setItem('jd_dismissed', JSON.stringify({}));
+  renderDismissed();
+}
+
 // ─── Tailor resume ────────────────────────────────────────────────────────────
 function tailorResume(guid) {
   const job = JOB_MAP[guid]; if (!job) return;
@@ -1683,8 +1861,8 @@ Instructions:
 1. Fetch the job listing URL above to get the full job description (if a URL is provided).
 2. Look in my jobsearch folder for my base resume — a .docx file that is a general master resume (not already tailored for another company). If you cannot find one, stop and tell me: describe what you looked for and ask me to point you to my base resume or confirm its filename.
 3. Tailor the resume: adjust the profile summary, reorder or reword bullets to emphasize skills most relevant to this specific role, and ensure keywords from the job description appear naturally. Do not fabricate experience.
-4. Save the tailored resume as both .docx and .pdf named: ${namePrefix}_resume_${safeName}.docx / ${namePrefix}_resume_${safeName}.pdf in resumes/archived/ (create the folder if it doesn't exist).
-5. Add it to the Resumes tab in the dashboard and share the files when done.`;
+4. Save the tailored resume as both .docx and .pdf named: ${namePrefix}_resume_${safeName}.docx / ${namePrefix}_resume_${safeName}.pdf in resumes/ (not archived — I'll move it there after applying).
+5. Add it to the Resumes tab in the dashboard: file = the .docx filename, company = "${job.companyName}", role = "${job.title}" (the job title, not the document type), type = tailored. Then share the files.`;
   document.getElementById('modal-title').textContent = `Tailor resume — ${job.title} at ${job.companyName}`;
   document.getElementById('modal-prompt').value = prompt;
   document.getElementById('tailor-modal').classList.add('open');
@@ -1775,7 +1953,14 @@ function isHybridOutsideLocalArea(job) {
 }
 
 // ─── AI scoring ───────────────────────────────────────────────────────────────
-function keywordScore(job, penaltyTerms) {
+function skillConfidenceWeight(confidence) {
+  return confidence >= 4 ? 2 : confidence >= 3 ? 1 : 0;
+}
+function skillMatchesText(skillName, text) {
+  const parts = skillName.toLowerCase().split(/[\/,\s\-]+/).filter(p => p.length > 2);
+  return parts.some(p => new RegExp('\\b' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(text));
+}
+function keywordScore(job, penaltyTerms, skillsItems) {
   const terms = penaltyTerms || [];
   const t = [job.title,job.summary,job.companyName].filter(Boolean).join(' ').toLowerCase();
   let s = 4;
@@ -1790,6 +1975,21 @@ function keywordScore(job, penaltyTerms) {
       terms.map(term => (/^\w/.test(term) ? '\\b' : '') + term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (/\w$/.test(term) ? '\\b' : '')).join('|')
     );
     if (penaltyRe.test(t)) s = Math.max(1, s-1);
+  }
+  const skills = Array.isArray(skillsItems) ? skillsItems : [];
+  if (skills.length) {
+    let skillBoost = 0;
+    for (const sk of skills) {
+      if (!sk.name || sk.confidence < 4) continue;
+      if (!skillMatchesText(sk.name, t)) continue;
+      const skParts = sk.name.toLowerCase().split(/[\/,\s\-]+/).filter(p => p.length > 2);
+      const yrsPattern = skParts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+      const yrsRe = new RegExp('(\\d+)\\+?\\s*(?:years?|yrs?)[^.]*(?:' + yrsPattern + ')', 'i');
+      const yrsMatch = t.match(yrsRe);
+      if (yrsMatch && parseInt(yrsMatch[1]) > (sk.years || 0)) continue;
+      skillBoost = Math.min(2, skillBoost + 1);
+    }
+    s = Math.min(10, s + skillBoost);
   }
   return Math.min(10, s);
 }
@@ -1807,8 +2007,12 @@ async function scoreJobs(jobs) {
   const penaltyLine = penaltyTerms.length
     ? `\n- Job primarily requires ${penaltyTerms.join(', ')} (not in candidate's stack) = subtract 1`
     : '';
+  const skills = (cfg.skillsItems || []).filter(sk => sk.confidence >= 3).sort((a,b) => b.confidence - a.confidence);
+  const skillsLine = skills.length
+    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years||'?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
+    : '';
   const prompt = `Score these ${jobs.length} job listings for this candidate:
-${PROFILE}${getDismissalContext()}
+${PROFILE}${getDismissalContext()}${skillsLine}
 
 SCORING: 9-10=Senior QE/SDET/test-automation, remote/hybrid, matching stack. 7-8=good fit. 5-6=partial. 1-4=poor.
 ADJUSTMENTS:
@@ -1829,6 +2033,153 @@ Return ONLY a valid JSON array, no markdown:
     }
     return null;
   } catch { return null; }
+}
+
+// ─── Skills tab ──────────────────────────────────────────────────────────────
+let skillsSort = { col: 'name', dir: 'asc' };
+
+function renderSkillsTable() {
+  const skills = getSettings().skillsItems || [];
+  const { col, dir } = skillsSort;
+  const sorted = [...skills].sort((a, b) => {
+    const av = col === 'years' || col === 'confidence' ? (a[col] || 0) : (a[col] || '').toLowerCase();
+    const bv = col === 'years' || col === 'confidence' ? (b[col] || 0) : (b[col] || '').toLowerCase();
+    const cmp = typeof av === 'number' ? av - bv : av.localeCompare(bv);
+    return dir === 'asc' ? cmp : -cmp;
+  });
+  ['name','years','confidence'].forEach(c => {
+    const el = document.getElementById('sk-sort-' + c);
+    if (!el) return;
+    el.className = 'sort-arrow' + (c === col ? ' active' : '');
+    el.textContent = c === col ? (dir === 'asc' ? '↑' : '↓') : '↕';
+  });
+  const tbody = document.getElementById('skills-tbody');
+  if (!tbody) return;
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;font-size:13px;">No skills yet — click <strong>Import from resume</strong> or <strong>+ Add skill</strong>.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(sk => {
+    const w = skillConfidenceWeight(sk.confidence || 1);
+    const wLabel = w > 0 ? '+' + w : '0';
+    return `<tr>
+      <td><input class="skill-name-input" value="${escHtml(sk.name || '')}" onchange="updateSkillField('${sk.id}','name',this.value)" /></td>
+      <td><input type="number" class="skill-yr-input" min="0" max="40" value="${sk.years || 0}" onchange="updateSkillField('${sk.id}','years',+this.value)" /></td>
+      <td><div class="conf-cell">
+        <input type="range" min="1" max="5" step="1" value="${sk.confidence || 3}"
+          oninput="this.nextElementSibling.textContent=this.value;updateSkillField('${sk.id}','confidence',+this.value);this.closest('tr').querySelector('.weight-badge').className='weight-badge weight-'+skillConfidenceWeight(+this.value);this.closest('tr').querySelector('.weight-badge').textContent=(skillConfidenceWeight(+this.value)>0?'+':'')+skillConfidenceWeight(+this.value)" />
+        <span class="conf-val">${sk.confidence || 3}</span>
+      </div></td>
+      <td><span class="weight-badge weight-${w}">${wLabel}</span></td>
+      <td><span class="src-badge src-${sk.source || 'manual'}">${sk.source || 'manual'}</span></td>
+      <td><button class="btn-del-skill" onclick="deleteSkill('${sk.id}')" title="Remove skill">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function skillsUid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function addSkill(name, years, confidence, source) {
+  const cfg = getSettings();
+  const items = cfg.skillsItems || [];
+  items.push({ id: skillsUid(), name: name || '', years: years || 0, confidence: confidence || 3, source: source || 'manual' });
+  setSettings({ ...cfg, skillsItems: items });
+  renderSkillsTable();
+}
+
+function deleteSkill(id) {
+  const cfg = getSettings();
+  setSettings({ ...cfg, skillsItems: (cfg.skillsItems || []).filter(sk => sk.id !== id) });
+  renderSkillsTable();
+}
+
+function updateSkillField(id, field, value) {
+  const cfg = getSettings();
+  const items = (cfg.skillsItems || []).map(sk => sk.id === id ? { ...sk, [field]: value } : sk);
+  setSettings({ ...cfg, skillsItems: items });
+  // Don't re-render on name/years edits — it would re-sort and jump the row mid-entry.
+}
+
+function sortSkills(col) {
+  if (skillsSort.col === col) skillsSort.dir = skillsSort.dir === 'asc' ? 'desc' : 'asc';
+  else { skillsSort.col = col; skillsSort.dir = 'asc'; }
+  renderSkillsTable();
+}
+
+async function importSkillsFromResume(btn) {
+  const resume = (getSettings().baseResume || '').trim();
+  const status = document.getElementById('skills-import-status');
+  if (!resume) {
+    // Fork: try server-side
+    btn.disabled = true; btn.textContent = '⏳ Importing…';
+    status.textContent = ''; status.style.color = '#64748b';
+    try {
+      const r = await fetch('/api/generate-profile', { method: 'POST' });
+      const data = await r.json();
+      if (!r.ok || data.error) throw new Error(data.error || 'Server error');
+      // generate-profile returns {name,location,summary} — need full skills extraction separately
+      status.textContent = 'No resume stored. Paste your resume in the Resumes tab first, then try again.';
+      status.style.color = '#dc2626';
+    } catch {
+      status.textContent = 'No resume stored. Paste your resume in the Resumes tab first, then try again.';
+      status.style.color = '#dc2626';
+    }
+    btn.disabled = false; btn.textContent = '⬇ Import from resume';
+    return;
+  }
+  btn.disabled = true; btn.textContent = '⏳ Importing…';
+  status.textContent = ''; status.style.color = '#64748b';
+  try {
+    const r = await fetch('/api/extract-skills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume }),
+    });
+    let parsed = null;
+    if (r.ok) {
+      try {
+        const data = await r.json();
+        if (data.error === 'needs_ai_provider') {
+          status.textContent = 'Set an AI provider (Haiku or Ollama) in Settings → AI Scoring first.';
+          status.style.color = '#dc2626';
+          btn.disabled = false; btn.textContent = '⬇ Import from resume';
+          return;
+        }
+        if (data.ok && Array.isArray(data.skills)) parsed = data;
+      } catch {}
+    }
+    // Fallback: client-side via window.cowork if running as a Cowork artifact
+    if (!parsed && typeof window.cowork !== 'undefined') {
+      const raw = await window.cowork.askClaude(
+        `Extract skills from this resume. Return ONLY JSON: {"skills":[{"name":"Python/pytest","years":4,"confidence":5},...]}\n\nFor each skill: name (concise), years of experience (integer), confidence 1-5 (5=expert).\n\nRESUME:\n${resume.slice(0,8000)}\n\nReturn only the JSON.`, []
+      );
+      try { parsed = JSON.parse(raw.trim()); } catch {
+        const m = raw.match(/\{[\s\S]*\}/); if (m) try { parsed = JSON.parse(m[0]); } catch {}
+      }
+    }
+    if (!parsed || !Array.isArray(parsed.skills) || !parsed.skills.length) {
+      status.textContent = 'Could not extract skills. Try again or add manually.';
+      status.style.color = '#dc2626';
+    } else {
+      const cfg = getSettings();
+      const existing = new Set((cfg.skillsItems || []).map(sk => sk.name.toLowerCase()));
+      let added = 0;
+      for (const sk of parsed.skills) {
+        if (!sk.name || existing.has(sk.name.toLowerCase())) continue;
+        addSkill(sk.name, sk.years || 0, Math.min(5, Math.max(1, sk.confidence || 3)), 'auto');
+        existing.add(sk.name.toLowerCase());
+        added++;
+      }
+      status.textContent = added ? `Imported ${added} skill${added > 1 ? 's' : ''}.` : 'No new skills found (all already in list).';
+      status.style.color = '#16a34a';
+    }
+  } catch (e) {
+    status.textContent = 'Import failed: ' + (e.message || e);
+    status.style.color = '#dc2626';
+  }
+  btn.disabled = false; btn.textContent = '⬇ Import from resume';
 }
 
 // ─── Job fetching ─────────────────────────────────────────────────────────────
@@ -2091,7 +2442,7 @@ async function run(forceSearch = false) {
       scored = toScore
         .map((j,i) => ({
           ...j,
-          matchScore:  scoreMap[i]?.score  ?? keywordScore(j, getSettings().scorePenaltyTerms || []),
+          matchScore:  scoreMap[i]?.score  ?? keywordScore(j, getSettings().scorePenaltyTerms || [], getSettings().skillsItems || []),
           matchReason: scoreMap[i]?.reason ?? (scoringFailed ? 'keyword match' : ''),
         }))
         .filter(j => {
@@ -2161,11 +2512,20 @@ function toggleArchivedResumes() {
   s.style.display = hidden ? '' : 'none';
   b.textContent  = hidden ? 'Hide' : 'Show';
 }
+function updateResumeFormType() {
+  const type = document.getElementById('rf-type').value;
+  const roleInput = document.getElementById('rf-role');
+  roleInput.placeholder = type === 'cover' ? 'Position this letter is for (optional)' : 'Role / Position';
+  const v = roleInput.value.trim().toLowerCase();
+  if (v === 'cover letter' || v === 'tailored resume' || v === 'base resume') roleInput.value = '';
+}
 function saveNewResume() {
   const file    = document.getElementById('rf-file').value.trim();
   const type    = document.getElementById('rf-type').value;
   const company = document.getElementById('rf-company').value.trim();
-  const role    = document.getElementById('rf-role').value.trim();
+  let   role    = document.getElementById('rf-role').value.trim();
+  // Guard: never store the type label in the role field
+  if (role.toLowerCase() === 'cover letter' || role.toLowerCase() === 'tailored resume' || role.toLowerCase() === 'base resume') role = '';
   const date    = document.getElementById('rf-date').value;
   const folder  = document.getElementById('rf-folder').value;
   if (!file) { alert('File name is required.'); return; }
@@ -2369,7 +2729,10 @@ function loadSettingsForm() {
   document.querySelectorAll('input[name="st-defense"]').forEach(r => r.checked = r.value === (s.defensePreference || 'penalize'));
   document.getElementById('st-week-goal').value = s.weeklyActivityGoal || 5;
   document.getElementById('st-auto-backup').value = s.autoBackupIntervalHours || 0;
-  document.getElementById('st-penalty-terms').value = (s.scorePenaltyTerms || []).join(', ');
+  document.getElementById('st-title-require').value  = s.scoreTitleRequire || '';
+  document.getElementById('st-penalty-terms').value  = (s.scorePenaltyTerms || []).join(', ');
+  document.getElementById('st-show-dismissed').checked = !!s.showDismissedTab;
+  applyDismissedTabVisibility(!!s.showDismissedTab);
   // Common search terms — derive default from DICE_SEARCHES by stripping " remote" suffix
   const defaultTerms = [...new Set(DICE_SEARCHES.map(t=>t.replace(/ remote$/i,'').trim()))].join('\n');
   document.getElementById('st-terms').value  = s.searchTerms        ? s.searchTerms.join('\n')                    : defaultTerms;
@@ -2406,6 +2769,7 @@ function saveSettingsForm() {
   const metro       = document.getElementById('st-metro').value.split(',').map(c=>c.trim().toLowerCase()).filter(Boolean);
   const minSal      = parseInt(document.getElementById('st-minsalary').value) || 0;
   setSettings({
+    ...getSettings(),   // preserve any keys not represented in this form (e.g. skillsItems)
     candidateName: document.getElementById('st-name').value.trim(),
     location:      document.getElementById('st-location').value.trim(),
     profile:       document.getElementById('st-profile').value.trim(),
@@ -2421,8 +2785,10 @@ function saveSettingsForm() {
     indeedSearchTerms: indeedLines.length ? indeedLines : null,
     zrSearchTerms:     zrLines.length     ? zrLines     : null,
     localMetroCities:  metro.length       ? metro       : null,
+    scoreTitleRequire: document.getElementById('st-title-require').value.trim(),
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
+    showDismissedTab: document.getElementById('st-show-dismissed').checked,
     rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
     anthropicKey:  document.getElementById('st-anthropic-key').value.trim(),
     skillsProfile: document.getElementById('st-resume-prefs').value.trim(),
@@ -2440,6 +2806,7 @@ function saveSettingsForm() {
       appPassword: document.getElementById('st-imap-pass').value,
     },
   });
+  applyDismissedTabVisibility(document.getElementById('st-show-dismissed').checked);
   const msg = document.getElementById('settings-saved-msg');
   msg.style.display = 'inline';
   setTimeout(() => msg.style.display = 'none', 2500);
@@ -2466,6 +2833,7 @@ function resetSettings() {
 // run() is called here (end of script) so that const INITIAL_RESUMES is
 // fully defined before run() → initResumes() tries to reference it.
 updateActFormFields();
+applyDismissedTabVisibility(!!getSettings().showDismissedTab);
 run();
 initAutoBackup();
 </script>
@@ -2473,10 +2841,17 @@ initAutoBackup();
 <script>
 // ─── Resume tailoring (standalone: end-to-end on the server, replaces the Cowork clipboard prompt) ───
 window.saveBaseResume = function(){
-  setSettings({ baseResume: document.getElementById('st-base-resume').value });
+  var cur = getSettings();
+  cur.baseResume    = document.getElementById('st-base-resume').value;
+  cur.skillsProfile = (document.getElementById('st-resume-prefs') || {}).value || cur.skillsProfile || '';
+  setSettings(cur);
   var s = document.getElementById('base-resume-saved'); if(s){ s.style.display='inline'; setTimeout(function(){ s.style.display='none'; }, 2000); }
 };
-(function(){ var bt = document.getElementById('st-base-resume'); if(bt) bt.value = (getSettings().baseResume) || ''; })();
+(function(){
+  var cur = getSettings();
+  var bt = document.getElementById('st-base-resume'); if(bt) bt.value = cur.baseResume || '';
+  var bp = document.getElementById('st-resume-prefs'); if(bp) bp.value = cur.skillsProfile || '';
+})();
 
 window.jsTailorClose = function(){ var m=document.getElementById('js-tailor-modal'); if(m) m.remove(); };
 function jsTailorShow(html){
