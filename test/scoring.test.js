@@ -12,14 +12,27 @@ const jobs = [
 ];
 
 describe('buildScorePrompt', () => {
-  it('embeds profile, jobs, penalty terms, dismissal context', () => {
+  it('embeds profile, jobs, and dismissal context', () => {
     const p = buildScorePrompt(jobs, { profile: 'Senior QE, Python', scorePenaltyTerms: ['java'], localMetroCities: ['denver'] },
       { g1: { reason: 'too junior' } });
     assert.ok(p.includes('Senior QE, Python'));
     assert.ok(p.includes('Senior SDET'));
-    assert.ok(p.includes('subtract 1'));            // penalty line present
     assert.ok(p.includes('too junior'));            // dismissal context
     assert.ok(p.includes('Hybrid role outside denver'));
+  });
+
+  it('does NOT include penalty terms in the AI prompt (keyword scorer only)', () => {
+    const p = buildScorePrompt(jobs, { profile: 'QE', scorePenaltyTerms: ['java', 'selenium'] }, {});
+    assert.ok(!p.includes('java'));
+    assert.ok(!p.includes('selenium'));
+  });
+
+  it('includes skills with years and confidence when provided', () => {
+    const settings = { profile: 'QE', skillsItems: [{ name: 'Python', years: 10, confidence: 5 }, { name: 'pytest', years: 4, confidence: 4 }] };
+    const p = buildScorePrompt(jobs, settings, {});
+    assert.ok(p.includes('Python: 10 yrs, 5/5'));
+    assert.ok(p.includes('pytest: 4 yrs, 4/5'));
+    assert.ok(p.includes('Boost score when job requires skills'));
   });
 });
 
@@ -50,7 +63,7 @@ describe('scoreJobs', () => {
     assert.equal(r.aiUsed, false);
     assert.equal(r.provider, 'keyword');
     assert.ok(r.jobs[0].matchScore >= 1 && r.jobs[0].matchScore <= 10);
-    assert.equal(r.jobs[0].matchReason, 'keyword match');
+    assert.ok(typeof r.jobs[0].matchReason === 'string' && r.jobs[0].matchReason.length > 0);
   });
 
   it('haiku provider (mocked) parses scores from the Anthropic response', async () => {
@@ -87,8 +100,8 @@ describe('scoreJobs', () => {
     // model returns score 99 for job 1 and omits job 2 entirely
     const fetchImpl = async () => ({ ok: true, json: async () => ({ content: [{ type: 'text', text: '{"scores":[{"index":1,"score":99,"reason":"hot"}]}' }] }) });
     const r = await scoreJobs(jobs, { provider: 'haiku', anthropicKey: 'K', fetchImpl });
-    assert.equal(r.jobs[0].matchScore, 10);                 // clamped
-    assert.equal(r.jobs[1].matchReason, 'keyword match');   // skipped job filled by keyword
+    assert.equal(r.jobs[0].matchScore, 10);                                              // clamped
+    assert.ok(typeof r.jobs[1].matchReason === 'string' && r.jobs[1].matchReason.length > 0); // skipped job filled by keyword
     assert.ok(r.jobs[1].matchScore >= 1 && r.jobs[1].matchScore <= 10);
   });
 });

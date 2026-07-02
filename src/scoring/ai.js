@@ -52,12 +52,9 @@ function buildScorePrompt(jobs, settings = {}, dismissedMap = {}) {
   const metro = (settings.localMetroCities && settings.localMetroCities.length)
     ? settings.localMetroCities.slice(0, 4).join(', ')
     : (settings.location || "the candidate's local area");
-  const penaltyTerms = settings.scorePenaltyTerms || [];
-  const penaltyLine = penaltyTerms.length
-    ? `\n- Job primarily requires ${penaltyTerms.join(', ')} (not in candidate's stack) = subtract 1` : '';
   const skills = (settings.skillsItems || []).filter(sk => sk.confidence >= 3).sort((a, b) => b.confidence - a.confidence);
   const skillsLine = skills.length
-    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years || '?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
+    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years || '?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost score when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
     : '';
   const list = jobs.map((j, i) =>
     `[${i + 1}] "${j.title}" at ${j.companyName} | ${(j.workplaceTypes || []).join('/') || 'unknown'} | Salary: ${j.salary || 'not listed'} | Source: ${j.source}\nSummary: ${(j.summary || '').slice(0, 200)}`
@@ -65,11 +62,12 @@ function buildScorePrompt(jobs, settings = {}, dismissedMap = {}) {
   return `Score these ${jobs.length} job listings for this candidate:
 ${profile}${dismissalContext(dismissedMap)}${skillsLine}
 
-SCORING: 9-10=excellent technical match for candidate's stack, remote/hybrid. 7-8=good fit. 5-6=partial. 1-4=poor.
+SCORING: 9-10=excellent technical match for candidate's stack, remote/hybrid. 7-8=good fit with minor gaps. 5-6=partial match. 1-4=poor fit or wrong domain.
 ADJUSTMENTS:
 - Security clearance OR defense/military/homeland = subtract 2 (min 1)
-- Hybrid role outside ${metro} = score 0 (auto-exclude)${penaltyLine}
+- Hybrid role outside ${metro} = score 0 (auto-exclude)
 - Do NOT penalise mid-level or non-senior titles (e.g. "Engineer II") — seniority alone is not a negative signal.
+- Use the candidate's skills list above to gauge fit. Jobs requiring a primary stack the candidate lacks (e.g. wrong core language or framework) should score lower naturally.
 
 JOBS:
 ${list}
@@ -152,17 +150,29 @@ async function scoreJobs(jobs, opts = {}) {
     return { jobs: jobs.map((j, i) => ({ ...j, matchScore: kw[i], matchReason: kwResults[i].reason })), provider, aiUsed: false, error: null };
   }
 
-  const prompt = buildScorePrompt(jobs, settings, dismissedMap);
+  // Ollama has a limited context window (default num_ctx: 8192); batch to avoid overflows.
+  // Haiku has a 200k+ input limit so batching isn't needed, but it doesn't hurt either.
+  const BATCH_SIZE = provider === 'haiku' ? jobs.length : 15;
   const call = provider === 'haiku' ? scoreWithHaiku : scoreWithOllama;
-  let scores = null, error = null;
-  for (let attempt = 0; attempt < 2 && !scores; attempt++) {     // parse + validate + single retry
-    if (opts.onStatus) opts.onStatus(`Scoring ${jobs.length} jobs via ${provider}${attempt ? ' (retry)' : ''}…`);
-    try {
-      const raw = await call(prompt, opts);
-      if (raw && raw.length) scores = raw;
-    } catch (e) { error = String(e && e.message || e); break; } // a hard error (no key, http) → stop, fall back to keyword
+
+  const allScores = [];
+  let error = null;
+  for (let start = 0; start < jobs.length; start += BATCH_SIZE) {
+    const batch = jobs.slice(start, start + BATCH_SIZE);
+    const prompt = buildScorePrompt(batch, settings, dismissedMap);
+    let batchScores = null;
+    for (let attempt = 0; attempt < 2 && !batchScores; attempt++) {
+      if (opts.onStatus) opts.onStatus(`Scoring jobs ${start + 1}–${start + batch.length} of ${jobs.length} via ${provider}${attempt ? ' (retry)' : ''}…`);
+      try {
+        const raw = await call(prompt, opts);
+        if (raw && raw.length) batchScores = raw;
+      } catch (e) { error = String(e && e.message || e); break; }
+    }
+    if (!batchScores) { allScores.length = 0; break; } // hard failure — fall back to keyword for all
+    for (const s of batchScores) allScores.push({ ...s, index: s.index + start });
   }
 
+  const scores = allScores.length ? allScores : null;
   const byIndex = {};
   if (scores) for (const s of scores) if (s && Number.isFinite(Number(s.index))) byIndex[Number(s.index) - 1] = s;
 
