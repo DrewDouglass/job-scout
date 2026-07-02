@@ -483,10 +483,17 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
     <div style="font-size:11px;color:#aaa;margin-top:6px;padding:0 2px;" id="key-status"></div>
     <div id="pipeline-bar" style="display:none;" class="pipeline-bar"></div>
     <div id="unscored-toggle-row" style="display:none;margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#64748b;">
-        <input type="checkbox" id="chk-show-unscored" onchange="toggleUnscoredSection(this.checked)">
-        <span id="unscored-toggle-label">Show unscored results</span>
-      </label>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#64748b;">
+          <input type="checkbox" id="chk-show-unscored" onchange="toggleUnscoredSection(this.checked)">
+          <span id="unscored-toggle-label">Show unscored results</span>
+        </label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button id="btn-score-more" onclick="scoreBulkUnscored()" style="font-size:12px;padding:4px 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;color:#475569;cursor:pointer;">⚡ Score next</button>
+          <input id="bulk-score-n" type="number" min="1" max="50" value="10" style="width:48px;font-size:12px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:5px;text-align:center;">
+          <span style="font-size:12px;color:#94a3b8;">unscored</span>
+        </div>
+      </div>
     </div>
     <div id="unscored-section" style="display:none;margin-top:12px;">
       <div style="font-size:12px;color:#94a3b8;margin-bottom:8px;">These jobs were fetched but not sent to AI scoring (cap reached). Scores shown are keyword estimates only. Click <strong>AI Score</strong> to get an AI score for any individual listing.</div>
@@ -869,18 +876,23 @@ const PRELOADED_TIMESTAMP = null; // Set by daily task injection
       <h3>Scoring</h3>
       <div class="settings-field">
         <label>Title Must Contain <span style="font-weight:400;color:#94a3b8">— pre-score gate: drop jobs whose title matches none of these</span></label>
-        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated keywords. Jobs whose title contains none of them are dropped before scoring, saving AI credits and cutting noise. Leave blank to score everything. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">qa, quality, sdet, test, automation</code></div>
-        <input id="st-title-require" class="form-input" placeholder="e.g. qa, quality, sdet, test, automation" style="width:100%;box-sizing:border-box;" />
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated keywords. Jobs whose title contains none of them are dropped before scoring, saving AI credits and cutting noise. Leave blank to score everything. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">engineer, developer, architect, backend</code></div>
+        <input id="st-title-require" class="form-input" placeholder="Leave blank to score all titles" style="width:100%;box-sizing:border-box;" />
       </div>
       <div class="settings-field" style="margin-top:12px;">
-        <label>Score Penalty Keywords <span style="font-weight:400;color:#94a3b8">— jobs mentioning these get a &minus;1 score</span></label>
-        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated terms. Use for technologies or industries you&#x2019;d rather deprioritize. Leave blank for no penalty. Example: <code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;">java, selenium, playwright, appium</code></div>
-        <input id="st-penalty-terms" class="form-input" placeholder="e.g. java, selenium, playwright, appium, c#" style="width:100%;box-sizing:border-box;" />
+        <label>Score Penalty Keywords <span style="font-weight:400;color:#94a3b8">— keyword scorer: &minus;1 per match</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Comma-separated terms. Applied to the keyword fallback scorer only (not AI scoring). Jobs whose title or summary contains a term lose 1 point. Leave blank for no penalty.</div>
+        <input id="st-penalty-terms" class="form-input" placeholder="Leave blank for no penalty" style="width:100%;box-sizing:border-box;" />
       </div>
       <div class="settings-field" style="margin-top:12px;">
         <label>AI Scoring Cap <span style="font-weight:400;color:#94a3b8">— max jobs sent to AI for scoring</span></label>
-        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Jobs beyond this limit are silently dropped (not shown in results). Higher values surface more matches but increase search time — each additional 20 jobs adds roughly 10–15 seconds. Default: 60.</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Jobs beyond this limit go to the unscored section. Higher values surface more matches but increase search time. Default: 60.</div>
         <input id="st-scoring-cap" type="number" min="10" max="200" step="10" class="form-input" style="width:100px;" />
+      </div>
+      <div class="settings-field" style="margin-top:12px;">
+        <label>Minimum Score to Show <span style="font-weight:400;color:#94a3b8">— hide results below this threshold</span></label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:6px;">Jobs scoring below this are filtered from matched results. Lower to see more results (e.g. 3); raise to tighten the list. Default: 5.</div>
+        <input id="st-min-score" type="number" min="1" max="9" step="1" class="form-input" style="width:80px;" />
       </div>
     </div>
     <div class="settings-section">
@@ -1065,6 +1077,7 @@ const DEFAULT_SETTINGS = {
   scorePenaltyTerms: [],
   scoreTitleRequire: '',
   scoringCap: 60,
+  minScoreThreshold: 5,
   showDismissedTab: false,
   searchTerms: null,
   localMetroCities: null,
@@ -1076,22 +1089,51 @@ function getSettings() {
 }
 function setSettings(s) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} }
 function getEffectiveDiceSearches() {
-  const s=getSettings();
+  const s = getSettings();
+  const baseTerms = s.diceSearchTerms && s.diceSearchTerms.length ? s.diceSearchTerms
+    : s.searchTerms && s.searchTerms.length ? s.searchTerms
+    : DICE_SEARCHES.map(t => t.replace(/ remote$/i, '').trim());
   const wantsRemote = !s.workArrangements || s.workArrangements.includes('remote');
-  const base = s.searchTerms&&s.searchTerms.length
-    ? s.searchTerms.map(t => wantsRemote && !/\bremote\b/i.test(t) ? t + ' remote' : t)
-    : DICE_SEARCHES;
-  return [...new Set(base)];
+  const wantsLocal  = s.workArrangements && (s.workArrangements.includes('hybrid') || s.workArrangements.includes('on-site'));
+  const out = [];
+  for (const t of baseTerms.map(t => t.trim()).filter(Boolean)) {
+    if (/\bremote\b/i.test(t) || /\|/.test(t)) { out.push(t); continue; }
+    if (wantsRemote) out.push(t + ' remote');
+    if (wantsLocal)  out.push(t);
+    if (!wantsRemote && !wantsLocal) out.push(t);
+  }
+  return [...new Set(out)];
 }
 function getEffectiveIndeedSearches() {
-  const s=getSettings();
-  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms.map(t=>({q:t,loc:'remote'})) : INDEED_SEARCHES;
-  const seen=new Set(); return base.filter(x=>{ if(seen.has(x.q)) return false; seen.add(x.q); return true; });
+  const s = getSettings();
+  const lines = s.indeedSearchTerms && s.indeedSearchTerms.length ? s.indeedSearchTerms
+    : s.searchTerms && s.searchTerms.length ? s.searchTerms
+    : INDEED_SEARCHES.map(x => x.q);
+  const wantsRemote = !s.workArrangements || s.workArrangements.includes('remote');
+  const wantsLocal  = s.workArrangements && (s.workArrangements.includes('hybrid') || s.workArrangements.includes('on-site'));
+  const userLocation = s.location || '';
+  const seen = new Set(); const out = [];
+  for (const line of lines) {
+    const hasExplicitLoc = line.includes('|');
+    if (hasExplicitLoc) {
+      const [q, loc] = line.split('|').map(x => x.trim());
+      if (q && !seen.has(q + '|' + loc)) { seen.add(q + '|' + loc); out.push({ q, loc: loc || 'remote' }); }
+      continue;
+    }
+    const q = line.trim();
+    if (!q) continue;
+    if (wantsRemote  && !seen.has(q + '|remote'))                         { seen.add(q + '|remote');       out.push({ q, loc: 'remote' }); }
+    if (wantsLocal && userLocation && !seen.has(q + '|' + userLocation))  { seen.add(q + '|' + userLocation); out.push({ q, loc: userLocation }); }
+    if (!wantsRemote && !wantsLocal && !seen.has(q))                       { seen.add(q);                    out.push({ q, loc: '' }); }
+  }
+  return out;
 }
 function getEffectiveZrSearches() {
-  const s=getSettings();
-  const base = s.searchTerms&&s.searchTerms.length ? s.searchTerms : ZR_SEARCHES;
-  return [...new Set(base)];
+  const s = getSettings();
+  const terms = s.zrSearchTerms && s.zrSearchTerms.length ? s.zrSearchTerms
+    : s.searchTerms && s.searchTerms.length ? s.searchTerms
+    : ZR_SEARCHES;
+  return [...new Set(terms.map(t => t.trim()).filter(Boolean))];
 }
 function getEffectiveLocalAreaRe() {
   const s=getSettings();
@@ -1904,6 +1946,51 @@ Instructions:
 
 function closeModal() { document.getElementById('tailor-modal').classList.remove('open'); }
 
+// ─── Bulk-score unscored results ─────────────────────────────────────────────
+async function scoreBulkUnscored() {
+  const btn = document.getElementById('btn-score-more');
+  const n = Math.max(1, Math.min(50, parseInt(document.getElementById('bulk-score-n').value) || 10));
+  const dismissed = getDismissed();
+  const appliedKeys = getAppliedJobKeys();
+  const dismissedKeys = getDismissedJobKeys();
+  const eligible = UNSCORED_JOBS.filter(j =>
+    !dismissed.has(j.guid) &&
+    !appliedKeys.has(normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title)) &&
+    !dismissedKeys.has(normalizeForMatch(j.companyName) + '|' + normalizeForMatch(j.title))
+  );
+  const batch = eligible.slice(0, n);
+  if (!batch.length) { btn.textContent = 'Nothing to score'; setTimeout(() => { btn.textContent = '⚡ Score next'; }, 2000); return; }
+  btn.disabled = true;
+  btn.textContent = `Scoring ${batch.length}…`;
+  try {
+    const results = await scoreJobs(batch);
+    if (!results) { btn.textContent = 'Scoring failed'; setTimeout(() => { btn.disabled = false; btn.textContent = '⚡ Score next'; }, 3000); return; }
+    const threshold = getSettings().minScoreThreshold ?? 5;
+    const scoreMap = {};
+    for (const s of results) scoreMap[s.index - 1] = s;
+    const promoted = [];
+    batch.forEach((job, i) => {
+      const s = scoreMap[i];
+      if (s) { job.matchScore = s.score; job.matchReason = s.reason; }
+      if (job.matchScore >= threshold) {
+        promoted.push({...job});
+        JOB_MAP[job.guid] = job;
+      }
+    });
+    const scoredGuids = new Set(batch.map(j => j.guid));
+    UNSCORED_JOBS = UNSCORED_JOBS.filter(j => !scoredGuids.has(j.guid));
+    if (promoted.length) {
+      CURRENT_SCORED = [...CURRENT_SCORED, ...promoted].sort((a, b) => b.matchScore - a.matchScore);
+      renderJobRows();
+    }
+    renderUnscoredRows();
+    document.getElementById('unscored-toggle-label').textContent =
+      UNSCORED_JOBS.length ? `Show ${UNSCORED_JOBS.length} unscored results (keyword estimates only)` : 'No more unscored results';
+    btn.textContent = promoted.length ? `✓ ${promoted.length} added to results` : `✓ Scored (none met threshold)`;
+  } catch(e) { btn.textContent = 'Error: ' + (e.message || e); }
+  setTimeout(() => { btn.disabled = false; btn.textContent = '⚡ Score next'; }, 3000);
+}
+
 // ─── Unscored wrappers (unscored jobs live in UNSCORED_JOBS, not JOB_MAP) ─────
 function markAppliedUnscored(guid) {
   const job = UNSCORED_JOBS.find(j => j.guid === guid);
@@ -2035,24 +2122,23 @@ async function scoreJobs(jobs) {
     `[${i+1}] "${j.title}" at ${j.companyName} | ${(j.workplaceTypes||[]).join('/')||'unknown'} | Salary: ${j.salary||'not listed'} | Source: ${j.source}\nSummary: ${(j.summary||'').slice(0,200)}`
   ).join('\n\n');
   const cfg = getSettings();
+  const profile = (cfg.profile && cfg.profile.trim()) ? cfg.profile.trim() : PROFILE;
   const metro = cfg.localMetroCities && cfg.localMetroCities.length
     ? cfg.localMetroCities.slice(0,4).join(', ')
     : (cfg.location ? cfg.location : 'the candidate\'s local area');
-  const penaltyTerms = cfg.scorePenaltyTerms || [];
-  const penaltyLine = penaltyTerms.length
-    ? `\n- Job primarily requires ${penaltyTerms.join(', ')} (not in candidate's stack) = subtract 1`
-    : '';
   const skills = (cfg.skillsItems || []).filter(sk => sk.confidence >= 3).sort((a,b) => b.confidence - a.confidence);
   const skillsLine = skills.length
-    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years||'?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
+    ? `\nCandidate skills (years / confidence 1-5):\n${skills.map(sk => `  ${sk.name}: ${sk.years||'?'} yrs, ${sk.confidence}/5`).join('\n')}\nBoost score when job requires skills with confidence 4-5. Check "X+ years required" against candidate years.`
     : '';
   const prompt = `Score these ${jobs.length} job listings for this candidate:
-${PROFILE}${getDismissalContext()}${skillsLine}
+${profile}${getDismissalContext()}${skillsLine}
 
-SCORING: 9-10=Senior QE/SDET/test-automation, remote/hybrid, matching stack. 7-8=good fit. 5-6=partial. 1-4=poor.
+SCORING: 9-10=QE/SDET/test-automation, remote/hybrid, strong match to candidate's stack. 7-8=good fit with minor gaps. 5-6=partial match. 1-4=poor fit or wrong domain.
 ADJUSTMENTS:
 - Security clearance OR defense/military/homeland = subtract 2 (min 1)
-- Hybrid role outside ${metro} = score 0 (auto-exclude)${penaltyLine}
+- Hybrid role outside ${metro} = score 0 (auto-exclude)
+- Do NOT penalise mid-level or non-senior titles (e.g. "Engineer II") — seniority alone is not a negative signal.
+- Use the candidate's skills list above to gauge fit. Jobs requiring a primary stack the candidate lacks (e.g. wrong core language or framework) should score lower naturally.
 
 JOBS:
 ${list}
@@ -2061,7 +2147,8 @@ Return ONLY a valid JSON array, no markdown:
 [{"index":1,"score":8,"reason":"Senior SDET, Python/API automation, fully remote"}]`;
   try {
     const result = await window.cowork.askClaude(prompt, []);
-    const match = result.match(/\[[\s\S]*?\]/);
+    const resultStr = typeof result === 'string' ? result : (result?.text || result?.content || JSON.stringify(result));
+    const match = resultStr.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (match) {
       const parsed = JSON.parse(match[0]);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -2263,9 +2350,16 @@ async function searchIndeed(q, loc) {
 const ZR_SEARCHES = ['software engineer', 'senior developer', 'staff engineer'];
 async function searchZipRecruiter(jobRole) {
   try {
+    const cfg = getSettings();
+    const arrangements = cfg.workArrangements || ['remote'];
+    const locationTypes = [];
+    if (arrangements.includes('remote'))   locationTypes.push('REMOTE');
+    if (arrangements.includes('hybrid'))   locationTypes.push('HYBRID');
+    if (arrangements.includes('on-site'))  locationTypes.push('IN_PERSON');
+    if (!locationTypes.length) locationTypes.push('REMOTE');
     const r = await window.cowork.callMcpTool(ZR_TOOL, {
       job_role: jobRole,
-      location_types: ['REMOTE'],
+      location_types: locationTypes,
       employment_types: ['FULL_TIME'],
       seniority_classes: ['MID', 'SENIOR'],
     });
@@ -2416,7 +2510,7 @@ async function quickScoreJob(guid, btn) {
       const s = results[0];
       job.matchScore  = s.score;
       job.matchReason = s.reason;
-      if (s.score >= 5) {
+      if (s.score >= (getSettings().minScoreThreshold ?? 5)) {
         CURRENT_SCORED = [...CURRENT_SCORED, {...job, matchScore: s.score, matchReason: s.reason}]
           .sort((a,b) => b.matchScore - a.matchScore);
         UNSCORED_JOBS = UNSCORED_JOBS.filter(j => j.guid !== guid);
@@ -2519,6 +2613,15 @@ async function run(forceSearch = false) {
   searchAborted = false;
   UNSCORED_JOBS = [];
   document.getElementById('matches-error').innerHTML = '';
+  // Warn if profile is unset — scoring falls back to generic placeholder
+  const _profileCheck = getSettings().profile || '';
+  if (!_profileCheck.trim()) {
+    document.getElementById('matches-error').innerHTML =
+      `<div class="error-box" style="border-color:#f59e0b;background:#fffbeb;color:#92400e;">
+        ⚠️ <strong>Your profile isn't set.</strong> AI scoring is using a generic placeholder and results may be inaccurate.
+        <a href="#" onclick="switchTab('settings');return false;" style="color:#92400e;font-weight:600;margin-left:6px;">Go to Settings → Your Profile ↗</a>
+      </div>`;
+  }
   document.getElementById('loading-area').style.display = 'flex';
   document.getElementById('matches-content').style.display = 'none';
   const btnCancel = document.getElementById('btn-cancel-search');
@@ -2623,7 +2726,7 @@ async function run(forceSearch = false) {
           matchReason: scoreMap[i]?.reason ?? (scoringFailed ? 'keyword match' : ''),
         }))
         .filter(j => {
-          if (j.matchScore < 5) return false;
+          if (j.matchScore < (cfg.minScoreThreshold ?? 5)) return false;
           if (dismissed.has(j.guid)) return false;
           if (isHybridOutsideLocalArea(j)) return false;
           if (isNonSalaried(j)) return false;
@@ -2916,6 +3019,7 @@ function loadSettingsForm() {
   document.getElementById('st-title-require').value  = s.scoreTitleRequire || '';
   document.getElementById('st-penalty-terms').value  = (s.scorePenaltyTerms || []).join(', ');
   document.getElementById('st-scoring-cap').value    = s.scoringCap ?? 60;
+  document.getElementById('st-min-score').value      = s.minScoreThreshold ?? 5;
   document.getElementById('st-show-dismissed').checked = !!s.showDismissedTab;
   applyDismissedTabVisibility(!!s.showDismissedTab);
   // Common search terms — derive default from DICE_SEARCHES by stripping " remote" suffix
@@ -2967,6 +3071,7 @@ function saveSettingsForm() {
     scorePenaltyTerms: document.getElementById('st-penalty-terms').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
     scoringCap: Math.max(10, parseInt(document.getElementById('st-scoring-cap').value) || 60),
+    minScoreThreshold: Math.max(1, Math.min(9, parseInt(document.getElementById('st-min-score').value) || 5)),
     showDismissedTab: document.getElementById('st-show-dismissed').checked,
     rapidApiKey:   document.getElementById('st-rapidapi-key').value.trim(),
     anthropicKey:  document.getElementById('st-anthropic-key').value.trim(),

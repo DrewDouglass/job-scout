@@ -39,7 +39,7 @@ function skillMatchesText(skillName, text) {
 function keywordScoreWithReason(job, penaltyTerms, skillsItems) {
   const terms = penaltyTerms || [];
   const t = [job.title, job.summary, job.companyName].filter(Boolean).join(' ').toLowerCase();
-  let s = 4;
+  let s = 3;
   const hits = [], penalties = [];
 
   if (/senior|staff|lead|principal/.test(t)) { s++; hits.push('senior-level title'); }
