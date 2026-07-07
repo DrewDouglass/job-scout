@@ -266,8 +266,14 @@ function createServer(db) {
       }
 
       if (p === '/api/refresh' && req.method === 'POST') {
+        const settings = db.getSettings();
+        const hasProfile = !!(settings.profile && settings.profile.trim());
+        const jsearchEnabled = (settings.sources || {}).jsearch !== false;
+        const hasApiKey = !!(settings.rapidApiKey || process.env.RAPIDAPI_KEY);
+        if (!hasProfile) return sendJson(res, 400, { ok: false, error: 'No profile set — fill in Your Profile in Settings before searching.' });
+        if (jsearchEnabled && !hasApiKey) return sendJson(res, 400, { ok: false, error: 'No RapidAPI key set — add your JSearch key in Settings before searching.' });
         const { runDaily } = require('./pipeline');
-        try { const r = await runDaily(db, db.getSettings(), {}); return sendJson(res, 200, { ok: true, ...r }); }
+        try { const r = await runDaily(db, settings, {}); return sendJson(res, 200, { ok: true, ...r }); }
         catch (e) { return sendJson(res, 200, { ok: false, error: String(e && e.message || e) }); }
       }
 

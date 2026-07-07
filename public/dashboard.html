@@ -1196,8 +1196,10 @@ const INDEED_SEARCHES = [
 // ─── Global state ─────────────────────────────────────────────────────────────
 let JOB_MAP = {};
 let searchAborted = false;
+let _refreshAbortController = null;
 function cancelSearch() {
   searchAborted = true;
+  if (_refreshAbortController) { _refreshAbortController.abort(); _refreshAbortController = null; }
   const btn = document.getElementById('btn-cancel-search');
   btn.disabled = true;
   btn.textContent = 'Cancelling…';
@@ -2671,15 +2673,29 @@ async function run(forceSearch = false) {
     // TODO: Replace this block with a fetch('/api/search') call that triggers a
     // fresh server-side JSearch/LinkedIn run and streams results back.
     if (typeof window.cowork === 'undefined') {
-      document.getElementById('loading-area').style.display = 'none';
-      document.getElementById('matches-content').style.display = 'block';
-      document.getElementById('matches-error').innerHTML =
-        `<div class="error-box">⚠️ <strong>Live Search isn't available in the server-based version.</strong><br>
-        Results come from the scheduled server task (JSearch + LinkedIn). To refresh, restart the server or trigger a new scheduled run.<br>
-        <span style="font-size:12px;color:#888;margin-top:4px;display:block;">See the README for how to run a manual search from the terminal.</span></div>`;
-      document.getElementById('btn-live-search').disabled = false;
-      document.getElementById('btn-live-search').textContent = '🔍 Live Search';
-      document.getElementById('btn-cancel-search').style.display = 'none';
+      // Server-based fork: trigger a fresh run via /api/refresh and reload when done.
+      setStatus('Triggering server-side search…');
+      _refreshAbortController = new AbortController();
+      try {
+        const r = await fetch('/api/refresh', { method: 'POST', signal: _refreshAbortController.signal });
+        _refreshAbortController = null;
+        const j = await r.json();
+        if (j && !j.ok) throw new Error(j.error || 'Server search failed');
+      } catch(e) {
+        _refreshAbortController = null;
+        document.getElementById('loading-area').style.display = 'none';
+        document.getElementById('matches-content').style.display = 'block';
+        document.getElementById('btn-live-search').disabled = false;
+        document.getElementById('btn-live-search').textContent = '🔍 Live Search';
+        document.getElementById('btn-cancel-search').style.display = 'none';
+        if (e.name !== 'AbortError') {
+          document.getElementById('matches-error').innerHTML =
+            `<div class="error-box">⚠️ Search failed: ${e.message}. Try running <code>job-scout daily</code> from the terminal.</div>`;
+        }
+        return;
+      }
+      // Reload to pick up fresh PRELOADED_JOBS injected by the server.
+      location.reload();
       return;
     }
     source = PRELOADED_JOBS.length > 0 ? 'stale-fallback' : 'live';

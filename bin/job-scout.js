@@ -54,13 +54,21 @@ async function main() {
           console.log(`\n  job-scout is running.  Open:  http://127.0.0.1:${port}\n`);
         });
         // Backstop: if the last run is >24h old (or never), catch up in-process.
+        // Skip if profile is empty or no API key is configured — nothing useful will come back.
+        const settings = db.getSettings();
+        const hasProfile = !!(settings.profile && settings.profile.trim());
+        const jsearchEnabled = (settings.sources || {}).jsearch !== false;
+        const hasApiKey = !!(settings.rapidApiKey || process.env.RAPIDAPI_KEY);
+        const readyToSearch = hasProfile && (!jsearchEnabled || hasApiKey);
         const last = db.lastRun();
         const stale = !last || !last.finished_at || (Date.now() - last.finished_at) > 24 * 3600 * 1000;
-        if (stale) {
+        if (stale && readyToSearch) {
           console.log('  (no recent run — fetching jobs in the background…)');
-          runDaily(db, db.getSettings(), { onStatus: m => process.stderr.write('  ' + m + '\n') })
+          runDaily(db, settings, { onStatus: m => process.stderr.write('  ' + m + '\n') })
             .then(r => console.log(`  background run: ${r.scoredCount} jobs scored.`))
             .catch(e => console.error('  background run failed:', e.message));
+        } else if (stale && !readyToSearch) {
+          console.log('  (skipping background search — complete your profile and API key in Settings first)');
         }
         return; // keep the process alive
       }
